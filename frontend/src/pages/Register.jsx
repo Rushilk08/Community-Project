@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ErrorMessage from '../components/ErrorMessage';
@@ -8,8 +8,12 @@ export default function Register() {
   const { t } = useTranslation();
   const { signUp, error: authError } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const roleFromPath = location.pathname.startsWith('/customer') ? 'customer'
+    : location.pathname.startsWith('/worker') ? 'worker'
+    : null;
 
-  const [role, setRole] = useState('worker');
+  const [role, setRole] = useState(roleFromPath || 'worker');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -51,7 +55,10 @@ export default function Register() {
   };
 
   return (
-    <div style={{ maxWidth: '480px', margin: '2rem auto' }}>
+    <div className="auth-page">
+      <div className="auth-shell">
+      <Link to="/" className="public-brand auth-brand"><span className="brand-mark">WS</span><span>WorkSetu</span></Link>
+      <div className="auth-card">
       <div className="card">
         <div className="card-header" style={{ textAlign: 'center' }}>
           <h2 className="card-title" style={{ fontSize: '1.5rem', color: '#1e40af' }}>WorkSetu</h2>
@@ -180,10 +187,12 @@ export default function Register() {
 
         <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.9rem', color: '#64748b' }}>
           Already have an account?{' '}
-          <Link to="/login" style={{ fontWeight: 600 }}>
+          <Link to={roleFromPath ? `/${roleFromPath}/login` : '/login'} style={{ fontWeight: 600 }}>
             {t('login')}
           </Link>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );

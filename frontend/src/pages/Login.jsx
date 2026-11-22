@@ -14,6 +14,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const roleFromPath = location.pathname.startsWith('/customer') ? 'customer'
+    : location.pathname.startsWith('/worker') ? 'worker'
+    : null;
+  const expectedRoleLabel = roleFromPath === 'customer' ? 'Customer' : roleFromPath === 'worker' ? 'Worker' : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,12 +44,15 @@ export default function Login() {
   };
 
   return (
-    <div style={{ maxWidth: '440px', margin: '2rem auto' }}>
+    <div className="auth-page">
+      <div className="auth-shell">
+      <Link to="/" className="public-brand auth-brand"><span className="brand-mark">WS</span><span>WorkSetu</span></Link>
+      <div className="auth-card">
       <div className="card">
         <div className="card-header" style={{ textAlign: 'center' }}>
           <h2 className="card-title" style={{ fontSize: '1.5rem', color: '#1e40af' }}>WorkSetu</h2>
           <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            {t('login')}
+            {expectedRoleLabel ? `${expectedRoleLabel} ${t('login')}` : t('login')}
           </p>
         </div>
 
@@ -96,10 +103,12 @@ export default function Login() {
 
         <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.9rem', color: '#64748b' }}>
           Don't have an account?{' '}
-          <Link to="/register" style={{ fontWeight: 600 }}>
+          <Link to={roleFromPath ? `/${roleFromPath}/register` : '/register'} style={{ fontWeight: 600 }}>
             {t('register')}
           </Link>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );

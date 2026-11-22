@@ -38,6 +38,10 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/customer/login" element={<Login />} />
+              <Route path="/customer/register" element={<Register />} />
+              <Route path="/worker/login" element={<Login />} />
+              <Route path="/worker/register" element={<Register />} />
 
               {/* Customer Protected Routes */}
               <Route
