@@ -48,5 +48,13 @@
   "completed": "पूर्ण हुआ",
   "cancelled": "रद्द हुआ",
   "action": "कार्रवाई",
-  "viewDetails": "विवरण देखें"
+  "viewDetails": "विवरण देखें",
+  "customerProfileLogin": "ग्राहक प्रोफ़ाइल लॉगिन",
+  "workerProfileLogin": "मजदूर प्रोफ़ाइल लॉगिन",
+  "customerLoginDesc": "काम पोस्ट करने और मजदूर भर्ती करने के लिए लॉगिन करें",
+  "workerLoginDesc": "काम के प्रस्ताव देखने और स्वीकार करने के लिए लॉगिन करें",
+  "loginToCustomerProfile": "ग्राहक प्रोफ़ाइल में लॉगिन करें",
+  "loginToWorkerProfile": "मजदूर प्रोफ़ाइल में लॉगिन करें",
+  "switchToWorker": "काम खोजना चाहते हैं? मजदूर लॉगिन पर जाएँ",
+  "switchToCustomer": "मजदूर भर्ती करना चाहते हैं? ग्राहक लॉगिन पर जाएँ"
 }

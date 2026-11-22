@@ -19,11 +19,13 @@ export default function RoleRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  if (role === 'customer') {
+  const effectiveRole = role || user?.user_metadata?.role || localStorage.getItem(`worksetu_role_${user.id}`);
+
+  if (effectiveRole === 'customer') {
     return <Navigate to="/customer/dashboard" replace />;
   }
 
-  if (role === 'worker') {
+  if (effectiveRole === 'worker') {
     return <Navigate to="/worker/dashboard" replace />;
   }
 

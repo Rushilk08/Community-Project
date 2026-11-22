@@ -14,16 +14,46 @@ function isActive(job) {
 
 export default function CustomerProfile() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, role, updateProfile } = useAuth();
+
   const [jobs, setJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [jobsError, setJobsError] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
+
+  // Edit profile state
+  const [isEditing, setIsEditing] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
 
   const name = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('customer');
-  const activeJobs = jobs.filter(isActive);
-  const confirmedWorkers = jobs.reduce((sum, job) => sum + (Number(job.confirmed_workers) || 0), 0);
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || 'C';
 
+  const userPhone = user?.user_metadata?.phone || '';
+  const userLocation = user?.user_metadata?.location || 'Bengaluru, Karnataka';
+  const userOrg = user?.user_metadata?.organization || 'Individual / Household';
+
+  // Initialize edit form
+  useEffect(() => {
+    if (user) {
+      setFullName(user.user_metadata?.full_name || '');
+      setPhone(user.user_metadata?.phone || '');
+      setLocation(user.user_metadata?.location || 'Bengaluru, Karnataka');
+      setOrganization(user.user_metadata?.organization || 'Individual / Household');
+    }
+  }, [user]);
+
+  // Load customer jobs
   useEffect(() => {
     let active = true;
 
@@ -44,151 +74,283 @@ export default function CustomerProfile() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, []);
 
-  const retryLoadingJobs = () => setReloadKey((key) => key + 1);
+  const activeJobs = jobs.filter(isActive);
+  const confirmedWorkers = jobs.reduce((sum, job) => sum + (Number(job.confirmed_workers) || 0), 0);
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveSuccess('');
+
+    try {
+      if (updateProfile) {
+        await updateProfile({
+          full_name: fullName,
+          phone,
+          location,
+          organization
+        });
+      }
+      setSaveSuccess('Your customer profile details were updated successfully.');
+      setIsEditing(false);
+      setTimeout(() => setSaveSuccess(''), 4000);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <div className="customer-profile-hub">
-      <header className="customer-hub-hero">
-        <div className="customer-hub-copy">
-          <span className="customer-hub-eyebrow">CUSTOMER PROFILE &amp; HIRING</span>
-          <h1>Welcome, {name}</h1>
-          <p>Manage your contact details and keep all your worker requests moving from one place.</p>
-          <Link to="/customer/post-job" className="customer-hub-primary">
-            <span aria-hidden="true">＋</span> {t('postJob')}
-          </Link>
+    <div className="role-profile-page customer-profile-page">
+      {/* Hero Header */}
+      <header className="role-profile-hero customer-profile-hero">
+        <div className="profile-avatar customer-profile-avatar" aria-hidden="true">
+          {initials}
         </div>
-        <div className="customer-hub-highlight" aria-label="Customer hiring account">
-          <span className="customer-hub-highlight-icon" aria-hidden="true">⌂</span>
-          <span className="customer-hub-highlight-label">YOUR ACCOUNT</span>
-          <strong>Customer</strong>
-          <span className="customer-hub-highlight-note">Personal hiring workspace</span>
+        <div className="profile-hero-copy">
+          <span className="profile-eyebrow">CUSTOMER ACCOUNT</span>
+          <h1>{name}</h1>
+          <p>
+            Manage your hiring contact details, employer preferences, and active job requests from one dedicated space.
+          </p>
         </div>
+        <span className="profile-role-pill">🏢 {t('customer')}</span>
       </header>
 
-      <section className="dashboard-stat-grid customer-profile-stats" aria-label="Your hiring activity">
-        <article className="dashboard-stat-card">
-          <span className="dashboard-stat-icon offers-icon" aria-hidden="true">▤</span>
-          <div>
-            <p>Total requests</p>
-            <strong>{loadingJobs ? '—' : jobs.length}</strong>
-            <span>jobs posted from your account</span>
-          </div>
-        </article>
-        <article className="dashboard-stat-card">
-          <span className="dashboard-stat-icon bookings-icon" aria-hidden="true">◷</span>
-          <div>
-            <p>In progress</p>
-            <strong>{loadingJobs ? '—' : activeJobs.length}</strong>
-            <span>open or active requests</span>
-          </div>
-        </article>
-        <article className="dashboard-stat-card">
-          <span className="dashboard-stat-icon skill-icon" aria-hidden="true">✓</span>
-          <div>
-            <p>Confirmed workers</p>
-            <strong>{loadingJobs ? '—' : confirmedWorkers}</strong>
-            <span>across your requests</span>
-          </div>
-        </article>
-      </section>
-
-      <section className="customer-profile-content">
-        <section className="customer-contact-panel">
-          <div className="customer-profile-section-heading">
+      {/* Main Grid */}
+      <div className="role-profile-grid">
+        {/* Left Column: Account Details & Recent Requests */}
+        <section className="role-profile-card">
+          <div className="role-profile-card-heading">
             <div>
-              <span className="customer-hub-eyebrow dark">ACCOUNT DETAILS</span>
-              <h2>Contact information</h2>
+              <span className="profile-section-label">YOUR ACCOUNT</span>
+              <h2>Customer account details</h2>
             </div>
-            <span className="customer-contact-icon" aria-hidden="true">◎</span>
-          </div>
-          <div className="customer-contact-list">
-            <div className="customer-contact-row">
-              <span className="customer-contact-row-icon" aria-hidden="true">♙</span>
-              <div><span>{t('fullName')}</span><strong>{user?.user_metadata?.full_name || 'Not provided'}</strong></div>
-            </div>
-            <div className="customer-contact-row">
-              <span className="customer-contact-row-icon" aria-hidden="true">@</span>
-              <div><span>{t('email')}</span><strong>{user?.email || 'Not provided'}</strong></div>
-            </div>
-            <div className="customer-contact-row">
-              <span className="customer-contact-row-icon" aria-hidden="true">☎</span>
-              <div><span>{t('phoneNumber')}</span><strong>{user?.user_metadata?.phone || 'Not provided'}</strong></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="profile-edit-btn"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                {isEditing ? t('cancel') : '✏️ Edit Profile'}
+              </button>
+              <span className="profile-card-symbol customer-symbol" aria-hidden="true">
+                🏢
+              </span>
             </div>
           </div>
-          <p className="customer-contact-note">These are the account details associated with your customer sign-in.</p>
+
+          {saveSuccess && (
+            <div className="profile-success-alert" role="status">
+              <span>✓</span> {saveSuccess}
+            </div>
+          )}
+
+          {isEditing ? (
+            <form onSubmit={handleSaveProfile} style={{ marginTop: '0.5rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-name">{t('fullName')}</label>
+                <input
+                  id="edit-name"
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="form-input"
+                  placeholder="e.g. Ramesh Kumar"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-phone">{t('phoneNumber')}</label>
+                <input
+                  id="edit-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="form-input"
+                  placeholder="e.g. +91 98765 43210"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-location">{t('location')}</label>
+                <input
+                  id="edit-location"
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="form-input"
+                  placeholder="e.g. Indiranagar, Bengaluru"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-org">Hiring Category / Organization</label>
+                <input
+                  id="edit-org"
+                  type="text"
+                  value={organization}
+                  onChange={(e) => setOrganization(e.target.value)}
+                  className="form-input"
+                  placeholder="e.g. Residential Villa Renovation / ABC Builders"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button type="submit" disabled={isSaving} className="btn btn-primary btn-sm">
+                  {isSaving ? t('loading') : t('save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="btn btn-outline btn-sm"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <dl className="profile-detail-grid">
+              <div className="profile-detail">
+                <dt>{t('fullName')}</dt>
+                <dd>{name}</dd>
+              </div>
+              <div className="profile-detail">
+                <dt>{t('email')}</dt>
+                <dd>{user?.email || 'Not provided'}</dd>
+              </div>
+              <div className="profile-detail">
+                <dt>{t('phoneNumber')}</dt>
+                <dd>{userPhone || 'Not provided'}</dd>
+              </div>
+              <div className="profile-detail">
+                <dt>{t('role')}</dt>
+                <dd>Customer / Employer</dd>
+              </div>
+              <div className="profile-detail">
+                <dt>{t('location')}</dt>
+                <dd>{userLocation}</dd>
+              </div>
+              <div className="profile-detail">
+                <dt>Hiring Category</dt>
+                <dd>{userOrg}</dd>
+              </div>
+            </dl>
+          )}
+
+          {/* Recent Hiring Activity */}
+          <div className="profile-recent-section">
+            <div className="profile-recent-section-header">
+              <h3>{t('myJobs')} &amp; Recent Requests</h3>
+              <Link to="/customer/my-jobs" className="customer-view-all">
+                View all <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+
+            {loadingJobs ? (
+              <p className="customer-profile-message">Loading hiring activity…</p>
+            ) : jobsError ? (
+              <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{jobsError}</p>
+            ) : jobs.length > 0 ? (
+              jobs.slice(0, 3).map((job, idx) => (
+                <div className="profile-job-item" key={job.id || `job-${idx}`}>
+                  <div className="profile-job-info">
+                    <h4>{job.title || 'Untitled job'}</h4>
+                    <p>
+                      {job.location || 'Location not set'} {job.date ? `· ${job.date}` : ''}
+                      {' · '}
+                      <strong>{Number(job.confirmed_workers) || 0}/{Number(job.workers_required) || 0} confirmed</strong>
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className={`customer-job-state ${isActive(job) ? 'is-active' : 'is-closed'}`}>
+                      {getStatus(job)}
+                    </span>
+                    <Link
+                      to={`/customer/live-hiring?jobId=${job.id}`}
+                      className="customer-recent-job-link"
+                      aria-label={`View live hiring for ${job.title || 'job'}`}
+                    >
+                      →
+                    </Link>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="customer-profile-empty">
+                <span className="customer-recent-job-icon" aria-hidden="true">＋</span>
+                <div>
+                  <h3>No job requests yet</h3>
+                  <p>Post your first job request to hire verified workers nearby.</p>
+                </div>
+                <Link to="/customer/post-job" className="btn btn-primary btn-sm">
+                  {t('postJob')}
+                </Link>
+              </div>
+            )}
+          </div>
         </section>
 
-        <aside className="customer-profile-actions">
-          <span className="customer-hub-eyebrow dark">HIRING TOOLS</span>
-          <h2>Manage your projects</h2>
-          <p>Move from a job request to a confirmed team with these shortcuts.</p>
-          <Link to="/customer/my-jobs" className="customer-profile-action-link">
-            <span className="customer-profile-action-icon" aria-hidden="true">▤</span>
-            <span><strong>{t('myJobs')}</strong><small>View every request</small></span>
-            <span aria-hidden="true">→</span>
-          </Link>
-          <Link to="/customer/live-hiring" className="customer-profile-action-link">
-            <span className="customer-profile-action-icon" aria-hidden="true">◷</span>
-            <span><strong>{t('liveHiring')}</strong><small>Track worker responses</small></span>
-            <span aria-hidden="true">→</span>
-          </Link>
-          <Link to="/customer/confirmed-workers" className="customer-profile-action-link">
-            <span className="customer-profile-action-icon" aria-hidden="true">✓</span>
-            <span><strong>{t('confirmedWorkers')}</strong><small>Review your team</small></span>
-            <span aria-hidden="true">→</span>
-          </Link>
-        </aside>
-      </section>
+        {/* Right Column: Hiring Status Highlight & Quick Actions */}
+        <aside className="profile-side-column">
+          {/* Hiring Overview Highlight Card */}
+          <section className="profile-highlight customer-hiring-highlight">
+            <span className="profile-highlight-icon" aria-hidden="true">
+              ✦
+            </span>
+            <span className="profile-section-label">HIRING OVERVIEW</span>
+            <h2>Active Employer Account</h2>
+            <p>Your hiring summary across all posted jobs and local worker requests.</p>
 
-      <section className="customer-recent-jobs">
-        <div className="customer-profile-section-heading">
-          <div>
-            <span className="customer-hub-eyebrow dark">RECENT ACTIVITY</span>
-            <h2>Your latest job requests</h2>
-          </div>
-          <Link to="/customer/my-jobs" className="customer-view-all">View all jobs <span aria-hidden="true">→</span></Link>
-        </div>
-
-        {jobsError ? (
-          <div className="customer-jobs-error" role="alert">
-            <span>{jobsError}</span>
-            <button type="button" onClick={retryLoadingJobs}>Try again</button>
-          </div>
-        ) : loadingJobs ? (
-          <p className="customer-profile-message">Loading your job requests…</p>
-        ) : jobs.length > 0 ? (
-          <div className="customer-recent-list">
-            {jobs.slice(0, 3).map((job, index) => (
-              <article className="customer-recent-job" key={job.id || `customer-job-${index}`}>
-                <span className="customer-recent-job-icon" aria-hidden="true">▤</span>
-                <div className="customer-recent-job-main">
-                  <h3>{job.title || 'Untitled job'}</h3>
-                  <p>{job.location || 'Location not set'}{job.date ? ` · ${job.date}` : ''}</p>
-                </div>
-                <span className={`customer-job-state ${isActive(job) ? 'is-active' : 'is-closed'}`}>{getStatus(job)}</span>
-                <Link
-                  to={`/customer/live-hiring?jobId=${job.id}`}
-                  className="customer-recent-job-link"
-                  aria-label={`View hiring progress for ${job.title || 'job'}`}
-                >
-                  →
-                </Link>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="customer-profile-empty">
-            <span className="customer-recent-job-icon" aria-hidden="true">＋</span>
-            <div>
-              <h3>No job requests yet</h3>
-              <p>Post your first request and it will appear here with its hiring progress.</p>
+            <div className="profile-hiring-stats">
+              <div className="profile-stat-box">
+                <strong>{loadingJobs ? '—' : jobs.length}</strong>
+                <span>Requests</span>
+              </div>
+              <div className="profile-stat-box">
+                <strong>{loadingJobs ? '—' : activeJobs.length}</strong>
+                <span>Active</span>
+              </div>
+              <div className="profile-stat-box">
+                <strong>{loadingJobs ? '—' : confirmedWorkers}</strong>
+                <span>Confirmed</span>
+              </div>
             </div>
-            <Link to="/customer/post-job" className="btn btn-primary btn-sm">Post a job</Link>
-          </div>
-        )}
-      </section>
+
+            <Link to="/customer/my-jobs" className="profile-inline-link">
+              View full hiring history <span aria-hidden="true">→</span>
+            </Link>
+          </section>
+
+          {/* Action Card */}
+          <section className="profile-action-card">
+            <span className="profile-section-label">NEED WORKERS NOW?</span>
+            <h2>{t('postJob')}</h2>
+            <p>
+              Specify your trade requirement, daily wage, date, and location to connect with dependable workers.
+            </p>
+            <Link to="/customer/post-job" className="btn btn-primary" style={{ width: '100%' }}>
+              <span aria-hidden="true">＋</span> {t('postJob')} <span aria-hidden="true">→</span>
+            </Link>
+
+            <div className="profile-action-buttons">
+              <Link to="/customer/my-jobs" className="btn btn-outline btn-sm">
+                📋 {t('myJobs')}
+              </Link>
+              <Link to="/customer/live-hiring" className="btn btn-outline btn-sm">
+                ◷ {t('liveHiring')}
+              </Link>
+              <Link to="/customer/confirmed-workers" className="btn btn-outline btn-sm">
+                ✓ {t('confirmedWorkers')}
+              </Link>
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -21,13 +21,16 @@ export default function ProtectedRoute({ allowedRoles = [], children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Determine effective role with metadata/localStorage fallback
+  const effectiveRole = role || user?.user_metadata?.role || localStorage.getItem(`worksetu_role_${user.id}`);
+
   // If specific roles required, verify user's role
-  if (allowedRoles.length > 0 && (!role || !allowedRoles.includes(role))) {
-    console.warn(`[ProtectedRoute] Access denied for role '${role}'. Required: ${allowedRoles.join(', ')}`);
+  if (allowedRoles.length > 0 && (!effectiveRole || !allowedRoles.includes(effectiveRole))) {
+    console.warn(`[ProtectedRoute] Access denied for role '${effectiveRole}'. Required: ${allowedRoles.join(', ')}`);
     // Redirect to the user's correct dashboard
-    if (role === 'customer') {
+    if (effectiveRole === 'customer') {
       return <Navigate to="/customer/dashboard" replace />;
-    } else if (role === 'worker') {
+    } else if (effectiveRole === 'worker') {
       return <Navigate to="/worker/dashboard" replace />;
     } else {
       return <Navigate to="/login" replace />;

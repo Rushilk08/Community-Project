@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AuthConfirm from './pages/AuthConfirm';
 
 // Customer Pages (Member 2 integration points)
 import CustomerDashboard from './pages/customer/Dashboard';
@@ -42,6 +43,8 @@ export default function App() {
               <Route path="/customer/register" element={<Register />} />
               <Route path="/worker/login" element={<Login />} />
               <Route path="/worker/register" element={<Register />} />
+              <Route path="/auth/confirm" element={<AuthConfirm />} />
+              <Route path="/auth/callback" element={<AuthConfirm />} />
 
               {/* Customer Protected Routes */}
               <Route

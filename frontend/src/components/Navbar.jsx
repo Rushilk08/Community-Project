@@ -19,9 +19,12 @@ export default function Navbar() {
     navigate('/login');
   };
 
+  const isCustomer = role === 'customer' || location.pathname.startsWith('/customer');
+  const isWorker = !isCustomer && (role === 'worker' || location.pathname.startsWith('/worker'));
+
   const getDashboardPath = () => {
-    if (role === 'customer') return '/customer/dashboard';
-    if (role === 'worker') return '/worker/dashboard';
+    if (isCustomer) return '/customer/dashboard';
+    if (isWorker) return '/worker/dashboard';
     return '/';
   };
 
@@ -38,7 +41,7 @@ export default function Navbar() {
         <ul className="nav-links">
           {isAuthenticated ? (
             <>
-              {role === 'customer' && (
+              {isCustomer && (
                 <>
                   <li>
                     <NavLink to="/customer/dashboard" className="nav-link">
@@ -63,7 +66,7 @@ export default function Navbar() {
                 </>
               )}
 
-              {role === 'worker' && (
+              {isWorker && (
                 <>
                   <li>
                     <NavLink to="/worker/dashboard" className="nav-link">
@@ -90,7 +93,7 @@ export default function Navbar() {
 
               <li>
                 <NavLink
-                  to={role === 'customer' ? '/customer/profile' : '/worker/profile'}
+                  to={isCustomer ? '/customer/profile' : '/worker/profile'}
                   className="nav-link"
                 >
                   {t('profile')}
@@ -121,10 +124,10 @@ export default function Navbar() {
         {isAuthenticated && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span
-              className={`badge ${role === 'customer' ? 'badge-neutral' : 'badge-success'}`}
+              className={`badge ${isCustomer ? 'badge-neutral' : 'badge-success'}`}
               title={user?.email}
             >
-              {role === 'customer' ? t('customer') : t('worker')}
+              {isCustomer ? t('customer') : t('worker')}
             </span>
 
             <button

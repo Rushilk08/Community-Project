@@ -48,5 +48,13 @@
   "completed": "Completed",
   "cancelled": "Cancelled",
   "action": "Action",
-  "viewDetails": "View Details"
+  "viewDetails": "View Details",
+  "customerProfileLogin": "Customer Profile Login",
+  "workerProfileLogin": "Worker Profile Login",
+  "customerLoginDesc": "Sign in to your Customer account to hire workers & post jobs",
+  "workerLoginDesc": "Sign in to your Worker account to view job offers & accept work",
+  "loginToCustomerProfile": "Login to Customer Profile",
+  "loginToWorkerProfile": "Login to Worker Profile",
+  "switchToWorker": "Need to find work instead? Switch to Worker Login",
+  "switchToCustomer": "Need to hire workers instead? Switch to Customer Login"
 }
