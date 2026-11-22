@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { updateWorkerAvailability, getWorkerBookings } from '../../services/api';
+import { updateWorkerAvailability, getWorkerBookings, updateWorkerLocation, acceptOffer } from '../../services/api';
 import useWorkerOffers from '../../hooks/useWorkerOffers';
+import SlideToAccept from '../../components/SlideToAccept';
 
 export default function WorkerDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(true);
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState('');
+  const [acceptingOfferId, setAcceptingOfferId] = useState(null);
   const {
     offers,
     loading: offersLoading,
@@ -21,12 +24,46 @@ export default function WorkerDashboard() {
     refresh: refreshOffers
   } = useWorkerOffers({ enabled: isAvailable });
 
+  const handleDashboardAccept = async (offerId) => {
+    setAcceptingOfferId(offerId);
+    try {
+      await acceptOffer(offerId);
+      navigate('/worker/accepted-job');
+    } catch (err) {
+      if (err.message && (err.message.includes('already accepted') || err.message.includes('not pending'))) {
+        navigate('/worker/accepted-job');
+      } else {
+        alert(err.message || 'Failed to accept offer.');
+      }
+    } finally {
+      setAcceptingOfferId(null);
+    }
+  };
+
   const workerName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('worker');
   const workerSkill = user?.user_metadata?.skill;
   const activeBookings = bookings.filter((booking) => {
     const status = String(booking.status || '').toLowerCase();
     return status !== 'completed' && status !== 'cancelled';
   });
+
+  useEffect(() => {
+    // Automatically detect and update worker's live GPS coordinates and availability
+    updateWorkerAvailability(true).catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          updateWorkerLocation({
+            latitude: Number(pos.coords.latitude.toFixed(6)),
+            longitude: Number(pos.coords.longitude.toFixed(6))
+          }).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -163,16 +200,69 @@ export default function WorkerDashboard() {
             </div>
           ) : offers.length > 0 ? (
             <div className="dashboard-list">
-              {offers.slice(0, 3).map((offer, index) => (
-                <article className="dashboard-list-item" key={offer.id || offer.offer_id || `${offer.job_id}-${index}`}>
-                  <span className="dashboard-list-marker" aria-hidden="true">✦</span>
-                  <div className="dashboard-list-copy">
-                    <h3>{offer.title || offer.skill || 'Local work opportunity'}</h3>
-                    <p>{offer.location || 'Location shared in offer details'}</p>
-                  </div>
-                  <strong className="dashboard-list-value">{offer.wage ? `₹${offer.wage}` : 'View offer'}{offer.wage ? <small> / day</small> : null}</strong>
-                </article>
-              ))}
+              {offers.slice(0, 3).map((offer, index) => {
+                const offerId = offer.id || offer.offer_id;
+                const isAccepting = acceptingOfferId === offerId;
+                return (
+                  <article
+                    className="dashboard-list-item"
+                    key={offerId || `${offer.job_id}-${index}`}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.85rem',
+                      padding: '1.15rem',
+                      border: '2px solid #86efac',
+                      backgroundColor: '#f0fdf4',
+                      borderRadius: '12px',
+                      marginBottom: '0.75rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#14532d' }}>
+                            {offer.title || offer.skill || 'Local work opportunity'}
+                          </h3>
+                          <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>NEW OFFER</span>
+                        </div>
+                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#475569' }}>
+                          📍 {offer.location || 'Location shared in offer details'}
+                        </p>
+                      </div>
+                      <strong style={{ fontSize: '1.2rem', color: '#15803d', fontWeight: 800 }}>
+                        {offer.wage ? `₹${offer.wage} / day` : 'Competitive wage'}
+                      </strong>
+                    </div>
+
+                    {/* Both Slide bar & 1-Click Accept directly before accepting */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: '100%', marginTop: '0.25rem' }}>
+                      <div style={{ flex: 1, minWidth: '180px' }}>
+                        <SlideToAccept
+                          onAccept={() => handleDashboardAccept(offerId)}
+                          isAccepting={isAccepting}
+                          label="Slide to Accept ➔"
+                          height={42}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDashboardAccept(offerId)}
+                        disabled={isAccepting}
+                        className="btn btn-primary btn-sm"
+                        style={{
+                          backgroundColor: '#16a34a',
+                          fontWeight: 700,
+                          padding: '0.55rem 1rem',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {isAccepting ? '⏳ Accepting...' : '⚡ 1-Click Accept'}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
               <Link to="/worker/job-offers" className="dashboard-panel-action">Review all job offers <span aria-hidden="true">→</span></Link>
             </div>
           ) : (

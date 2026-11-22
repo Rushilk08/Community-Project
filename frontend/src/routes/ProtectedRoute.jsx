@@ -21,8 +21,14 @@ export default function ProtectedRoute({ allowedRoles = [], children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Determine effective role with metadata/localStorage fallback
-  const effectiveRole = role || user?.user_metadata?.role || localStorage.getItem(`worksetu_role_${user.id}`);
+  // Determine effective role with metadata/sessionStorage fallback
+  const effectiveRole =
+    role ||
+    user?.user_metadata?.role ||
+    sessionStorage.getItem(`worklink_role_${user.id}`) ||
+    sessionStorage.getItem(`worksetu_role_${user.id}`) ||
+    localStorage.getItem(`worklink_role_${user.id}`) ||
+    localStorage.getItem(`worksetu_role_${user.id}`);
 
   // If specific roles required, verify user's role
   if (allowedRoles.length > 0 && (!effectiveRole || !allowedRoles.includes(effectiveRole))) {

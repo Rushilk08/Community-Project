@@ -9,7 +9,7 @@ async function getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token || null;
   } catch (err) {
-    console.warn('[WorkSetu API] Failed to fetch auth session token:', err);
+    console.warn('[WorkLink API] Failed to fetch auth session token:', err);
     return null;
   }
 }
@@ -117,7 +117,7 @@ export async function request(endpoint, {
 
     // If mocks enabled or network error, execute mock fallback gracefully
     if (ENABLE_MOCKS || error.name === 'TypeError' || error.message?.includes('Failed to fetch')) {
-      console.info(`[WorkSetu API Mock Fallback] ${method} ${endpoint}:`, error.message);
+      console.info(`[WorkLink API Mock Fallback] ${method} ${endpoint}:`, error.message);
       return handleMockFallback(endpoint, method, data);
     }
 
@@ -167,9 +167,21 @@ function handleMockFallback(endpoint, method, data) {
       confirmed_workers: job.confirmed_workers,
       pending_requests: job.pending_requests,
       workers_required: job.workers_required,
-      accepted_workers: [
-        { id: 'w1', name: 'Manjunath K.', phone: '+91 94481 12345', skill: 'Mason', accepted_at: new Date().toISOString() }
-      ],
+      accepted_workers: (mockDb.bookings && mockDb.bookings.length > 0)
+        ? mockDb.bookings.map(b => ({
+            id: b.id,
+            name: b.worker_name || 'Rushil',
+            phone: b.worker_phone || '7456123689',
+            skill: b.skill || 'General Labour',
+            agreed_wage: b.wage || 850,
+            is_new: true,
+            rating: 5.0,
+            reviews_count: 0,
+            experience_years: 0,
+            punctuality: '100%',
+            completed_jobs: 0
+          }))
+        : [],
       updated_at: new Date().toISOString()
     };
   }
@@ -292,6 +304,15 @@ export async function getJobStatus(jobId, { signal } = {}) {
 }
 
 /**
+ * Customer cancels an active job posting
+ */
+export async function cancelJob(jobId) {
+  return request(`/jobs/${jobId}/cancel`, {
+    method: 'POST'
+  });
+}
+
+/**
  * Worker toggles their availability (ON/OFF)
  */
 export async function updateWorkerAvailability(isAvailable) {
@@ -373,6 +394,7 @@ export default {
   createJob,
   getMyJobs,
   getJobStatus,
+  cancelJob,
   updateWorkerAvailability,
   updateWorkerLocation,
   getWorkerOffers,

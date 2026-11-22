@@ -6,7 +6,7 @@ import kn from './locales/kn.json';
 import hi from './locales/hi.json';
 
 // Retrieve saved language preference or default to English
-const savedLanguage = localStorage.getItem('worksetu_language') || 'en';
+const savedLanguage = localStorage.getItem('worklink_language') || 'en';
 
 i18n
   .use(initReactI18next)
@@ -20,12 +20,15 @@ i18n
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false // React already escapes values
+    },
+    react: {
+      useSuspense: false
     }
   });
 
 // Listen for language change to persist in localStorage
 i18n.on('languageChanged', (lng) => {
-  localStorage.setItem('worksetu_language', lng);
+  localStorage.setItem('worklink_language', lng);
 });
 
 export default i18n;

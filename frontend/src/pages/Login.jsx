@@ -73,14 +73,14 @@ export default function Login() {
           <LanguageSwitcher />
         </div>
         <Link to="/" className="public-brand auth-brand">
-          <span className="brand-mark">WS</span>
-          <span>WorkSetu</span>
+          <span className="brand-mark">WL</span>
+          <span>WorkLink</span>
         </Link>
         <div className="auth-card">
           <div className="card">
             <div className="card-header" style={{ textAlign: 'center' }}>
               <h2 className="card-title" style={{ fontSize: '1.5rem', color: isCustomer ? '#173f3d' : 'var(--primary)' }}>
-                WorkSetu
+                WorkLink
               </h2>
               <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.25rem' }}>
                 {isCustomer ? `${t('customer')} ${t('login')}` : `${t('worker')} ${t('login')}`}

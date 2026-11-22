@@ -67,7 +67,7 @@ export default function CustomerDashboard() {
           <div className="customer-art-orbit orbit-two" />
           <div className="customer-art-card">
             <span className="customer-art-check">✓</span>
-            <span className="dashboard-overline">WORKSETU MATCH</span>
+            <span className="dashboard-overline">WORKLINK MATCH</span>
             <strong>Local talent.<br />Right on time.</strong>
             <span className="customer-art-caption">Your next project starts here</span>
           </div>

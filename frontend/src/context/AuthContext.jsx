@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 
 // Purge legacy mock user data from developer testing so no one is logged in automatically
 if (typeof window !== 'undefined') {
+  localStorage.removeItem('worklink_mock_user');
   localStorage.removeItem('worksetu_mock_user');
 }
 
@@ -22,6 +23,12 @@ export function AuthProvider({ children }) {
     return (
       authUser.user_metadata?.role ||
       authUser.app_metadata?.role ||
+      sessionStorage.getItem(`worklink_role_${authUser.id}`) ||
+      sessionStorage.getItem(`worklink_role_${authUser.email}`) ||
+      sessionStorage.getItem(`worksetu_role_${authUser.id}`) ||
+      sessionStorage.getItem(`worksetu_role_${authUser.email}`) ||
+      localStorage.getItem(`worklink_role_${authUser.id}`) ||
+      localStorage.getItem(`worklink_role_${authUser.email}`) ||
       localStorage.getItem(`worksetu_role_${authUser.id}`) ||
       localStorage.getItem(`worksetu_role_${authUser.email}`) ||
       null
@@ -108,8 +115,10 @@ export function AuthProvider({ children }) {
       setUser(completeUser);
       setProfile(userProfile || mergedMetadata);
       setRole(detectedRole);
-      localStorage.setItem(`worksetu_role_${authUser.id}`, detectedRole);
-      localStorage.setItem(`worksetu_role_${authUser.email}`, detectedRole);
+      sessionStorage.setItem(`worklink_role_${authUser.id}`, detectedRole);
+      sessionStorage.setItem(`worklink_role_${authUser.email}`, detectedRole);
+      localStorage.setItem(`worklink_role_${authUser.id}`, detectedRole);
+      localStorage.setItem(`worklink_role_${authUser.email}`, detectedRole);
     } catch (err) {
       console.error('[AuthContext] Error syncing auth state:', err);
       setError(err.message);
@@ -126,13 +135,14 @@ export function AuthProvider({ children }) {
       try {
         if (!isSupabaseConfigured) {
           // In offline mode without Supabase, check if a registered session was explicitly active
-          const localUser = localStorage.getItem('worksetu_active_user');
+          const localUser = localStorage.getItem('worklink_active_user') || localStorage.getItem('worksetu_active_user');
           if (localUser && mounted) {
             try {
               const parsed = JSON.parse(localUser);
               setUser(parsed);
               setProfile(parsed.profile || parsed.user_metadata || parsed);
               const savedRole =
+                localStorage.getItem(`worklink_role_${parsed.id}`) ||
                 localStorage.getItem(`worksetu_role_${parsed.id}`) ||
                 parsed.user_metadata?.role ||
                 parsed.role ||
@@ -197,7 +207,7 @@ export function AuthProvider({ children }) {
     try {
       if (!isSupabaseConfigured) {
         // Fallback for offline mode: save to registered users store
-        const registeredUsers = JSON.parse(localStorage.getItem('worksetu_registered_users') || '[]');
+        const registeredUsers = JSON.parse(localStorage.getItem('worklink_registered_users') || localStorage.getItem('worksetu_registered_users') || '[]');
         if (registeredUsers.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
           throw new Error('An account with this email already exists. Please log in.');
         }
@@ -212,10 +222,10 @@ export function AuthProvider({ children }) {
           user_metadata: { role: userRole, full_name: fullName, phone, ...metadata }
         };
         registeredUsers.push(newUser);
-        localStorage.setItem('worksetu_registered_users', JSON.stringify(registeredUsers));
-        localStorage.setItem('worksetu_active_user', JSON.stringify(newUser));
-        localStorage.setItem(`worksetu_role_${newUser.id}`, userRole);
-        localStorage.setItem(`worksetu_role_${email}`, userRole);
+        localStorage.setItem('worklink_registered_users', JSON.stringify(registeredUsers));
+        localStorage.setItem('worklink_active_user', JSON.stringify(newUser));
+        localStorage.setItem(`worklink_role_${newUser.id}`, userRole);
+        localStorage.setItem(`worklink_role_${email}`, userRole);
 
         setUser(newUser);
         setProfile(newUser.user_metadata);
@@ -248,7 +258,7 @@ export function AuthProvider({ children }) {
       const isEmailConfirmationRequired = Boolean(data.user && !data.session);
 
       if (data.user) {
-        localStorage.setItem('worksetu_pending_role', userRole);
+        localStorage.setItem('worklink_pending_role', userRole);
 
         // Ensure profile is created in public.profiles table
         const profileRecord = {
@@ -279,8 +289,8 @@ export function AuthProvider({ children }) {
           setProfile(profileRecord);
         }
 
-        localStorage.setItem(`worksetu_role_${data.user.id}`, userRole);
-        localStorage.setItem(`worksetu_role_${email}`, userRole);
+        localStorage.setItem(`worklink_role_${data.user.id}`, userRole);
+        localStorage.setItem(`worklink_role_${email}`, userRole);
         setRole(userRole);
       }
 
@@ -304,7 +314,7 @@ export function AuthProvider({ children }) {
     try {
       if (!isSupabaseConfigured) {
         // In offline mode: verify that this email was previously registered!
-        const registeredUsers = JSON.parse(localStorage.getItem('worksetu_registered_users') || '[]');
+        const registeredUsers = JSON.parse(localStorage.getItem('worklink_registered_users') || localStorage.getItem('worksetu_registered_users') || '[]');
         const existingUser = registeredUsers.find(
           (u) => u.email.toLowerCase() === email.toLowerCase()
         );
@@ -321,9 +331,9 @@ export function AuthProvider({ children }) {
         existingUser.role = activeRole;
         if (existingUser.user_metadata) existingUser.user_metadata.role = activeRole;
 
-        localStorage.setItem('worksetu_active_user', JSON.stringify(existingUser));
-        localStorage.setItem(`worksetu_role_${existingUser.id}`, activeRole);
-        localStorage.setItem(`worksetu_role_${email}`, activeRole);
+        localStorage.setItem('worklink_active_user', JSON.stringify(existingUser));
+        localStorage.setItem(`worklink_role_${existingUser.id}`, activeRole);
+        localStorage.setItem(`worklink_role_${email}`, activeRole);
 
         setUser(existingUser);
         setProfile(existingUser.user_metadata || existingUser);
@@ -403,8 +413,8 @@ export function AuthProvider({ children }) {
         setUser(completeUser);
         setProfile(userProfile || mergedMetadata);
         setRole(userRole);
-        localStorage.setItem(`worksetu_role_${data.user.id}`, userRole);
-        localStorage.setItem(`worksetu_role_${email}`, userRole);
+        localStorage.setItem(`worklink_role_${data.user.id}`, userRole);
+        localStorage.setItem(`worklink_role_${email}`, userRole);
       }
 
       return { data, error: null };
@@ -438,7 +448,7 @@ export function AuthProvider({ children }) {
       setProfile((prev) => ({ ...(prev || {}), ...updates }));
 
       if (!isSupabaseConfigured) {
-        localStorage.setItem('worksetu_active_user', JSON.stringify(updatedUser));
+        localStorage.setItem('worklink_active_user', JSON.stringify(updatedUser));
         return { data: { user: updatedUser }, error: null };
       }
 
@@ -486,10 +496,13 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn('[AuthContext] signOut error:', err.message);
     } finally {
+      sessionStorage.clear();
+      localStorage.removeItem('worklink_active_user');
+      localStorage.removeItem('worklink_mock_user');
       localStorage.removeItem('worksetu_active_user');
       localStorage.removeItem('worksetu_mock_user');
       Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('worksetu_role_') || key.startsWith('sb-')) {
+        if (key.startsWith('worklink_role_') || key.startsWith('worksetu_role_') || key.startsWith('sb-')) {
           localStorage.removeItem(key);
         }
       });

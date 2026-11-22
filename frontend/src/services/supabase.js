@@ -15,7 +15,7 @@ export const isSupabaseConfigured = Boolean(
 
 if (!isSupabaseConfigured) {
   console.warn(
-    '[WorkSetu] Supabase environment variables are missing or placeholders. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend/.env. Refer to .env.example.'
+    '[WorkLink] Supabase environment variables are missing or placeholders. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend/.env. Refer to .env.example.'
   );
 }
 
@@ -29,7 +29,8 @@ export const supabase = createClient(validUrl, validKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storage: (typeof window !== 'undefined' ? window.sessionStorage : undefined)
   }
 });
 

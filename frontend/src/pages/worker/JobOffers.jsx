@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useWorkerOffers from '../../hooks/useWorkerOffers';
 import { acceptOffer, rejectOffer } from '../../services/api';
+import SlideToAccept from '../../components/SlideToAccept';
 import Loading from '../../components/Loading';
 import ErrorMessage from '../../components/ErrorMessage';
 
@@ -19,10 +20,15 @@ export default function JobOffers() {
     setActionError(null);
     try {
       await acceptOffer(offerId);
-      removeOffer(offerId);
+      if (removeOffer) removeOffer(offerId);
       navigate('/worker/accepted-job');
     } catch (err) {
-      setActionError(err.message || 'Failed to accept offer.');
+      if (err.message && (err.message.includes('already accepted') || err.message.includes('not pending'))) {
+        if (removeOffer) removeOffer(offerId);
+        navigate('/worker/accepted-job');
+      } else {
+        setActionError(err.message || 'Failed to accept offer.');
+      }
     } finally {
       setProcessingId(null);
     }
@@ -116,22 +122,21 @@ export default function JobOffers() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <button
                       onClick={() => handleReject(offer.id)}
                       disabled={processingId === offer.id}
-                      className="btn btn-outline"
+                      className="btn btn-outline btn-sm"
                       style={{ color: '#dc2626', borderColor: '#fca5a5' }}
                     >
                       ❌ {t('reject')}
                     </button>
-                    <button
-                      onClick={() => handleAccept(offer.id)}
-                      disabled={processingId === offer.id}
-                      className="btn btn-secondary"
-                    >
-                      {processingId === offer.id ? t('loading') : `✅ ${t('accept')}`}
-                    </button>
+                    <SlideToAccept
+                      onAccept={() => handleAccept(offer.id)}
+                      isAccepting={processingId === offer.id}
+                      label="Slide to Accept ➔"
+                      height={42}
+                    />
                   </div>
                 </div>
               </div>

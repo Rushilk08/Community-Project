@@ -1,5 +1,5 @@
 -- ==============================================================================
--- WorkSetu - Full Supabase Database Schema (Customer & Worker Authorization)
+-- WorkLink - Full Supabase Database Schema (Customer & Worker Authorization)
 -- ==============================================================================
 -- Instructions:
 -- 1. Open your Supabase Dashboard: https://supabase.com/dashboard/project/_/sql

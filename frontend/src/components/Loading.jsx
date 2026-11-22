@@ -31,7 +31,7 @@ export default function Loading({ message, fullScreen = false }) {
           border: '4px solid #e2e8f0',
           borderTop: '4px solid #1e40af',
           borderRadius: '50%',
-          animation: 'worksetu-spin 0.9s linear infinite',
+          animation: 'worklink-spin 0.9s linear infinite',
           marginBottom: '1rem'
         }}
       />
@@ -40,7 +40,7 @@ export default function Loading({ message, fullScreen = false }) {
       </p>
 
       <style>{`
-        @keyframes worksetu-spin {
+        @keyframes worklink-spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }

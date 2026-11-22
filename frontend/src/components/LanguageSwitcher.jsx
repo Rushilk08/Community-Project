@@ -20,11 +20,11 @@ export default function LanguageSwitcher({ className = '' }) {
 
   return (
     <div className={`language-switcher-container ${className}`}>
-      <label htmlFor="worksetu-lang-select" className="sr-only">
+      <label htmlFor="worklink-lang-select" className="sr-only">
         {t('selectLanguage')}
       </label>
       <select
-        id="worksetu-lang-select"
+        id="worklink-lang-select"
         value={currentLang}
         onChange={handleLanguageChange}
         className="language-switcher-select"

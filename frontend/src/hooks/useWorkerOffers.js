@@ -36,15 +36,8 @@ export function useWorkerOffers({
 
       if (res && (res.offers || Array.isArray(res))) {
         const rawOffers = res.offers || res;
-        // Deduplicate offers by offer ID
-        setOffers((prevOffers) => {
-          const map = new Map();
-          // Keep existing offers first
-          prevOffers.forEach((o) => map.set(o.id || o.offer_id, o));
-          // Merge newly arrived offers
-          rawOffers.forEach((o) => map.set(o.id || o.offer_id, o));
-          return Array.from(map.values());
-        });
+        // Set only currently active pending offers returned by backend
+        setOffers(Array.isArray(rawOffers) ? rawOffers : []);
       }
       setError(null);
     } catch (err) {

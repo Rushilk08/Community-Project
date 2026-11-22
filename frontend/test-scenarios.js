@@ -18,7 +18,7 @@ function assert(condition, testName) {
   }
 }
 
-console.log('=== WORKSETU INTEGRATION TEST SUITE (MEMBER 4) ===\n');
+console.log('=== WORKLINK INTEGRATION TEST SUITE ===\n');
 
 // 1. Multilingual Translations Integrity Test
 const requiredKeys = [

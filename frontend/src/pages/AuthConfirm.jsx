@@ -12,18 +12,19 @@ export default function AuthConfirm() {
 
     const searchParams = new URLSearchParams(location.search);
     const urlRole = searchParams.get('role');
-    const pendingRole = urlRole || localStorage.getItem('worksetu_pending_role') || 'customer';
+    const pendingRole = urlRole || localStorage.getItem('worklink_pending_role') || localStorage.getItem('worksetu_pending_role') || 'customer';
 
     function redirectToRole(session) {
       const finalRole =
         session?.user?.user_metadata?.role ||
         urlRole ||
-        (session?.user?.id && localStorage.getItem(`worksetu_role_${session.user.id}`)) ||
+        (session?.user?.id && (localStorage.getItem(`worklink_role_${session.user.id}`) || localStorage.getItem(`worksetu_role_${session.user.id}`))) ||
         pendingRole;
 
       if (session?.user?.id) {
-        localStorage.setItem(`worksetu_role_${session.user.id}`, finalRole);
+        localStorage.setItem(`worklink_role_${session.user.id}`, finalRole);
       }
+      localStorage.removeItem('worklink_pending_role');
       localStorage.removeItem('worksetu_pending_role');
 
       const dest = finalRole === 'worker' ? '/worker/dashboard' : '/customer/dashboard';

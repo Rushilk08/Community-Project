@@ -4,7 +4,7 @@ import { getJobStatus } from '../services/api';
 /**
  * Custom hook for customer real-time job hiring status polling:
  * - Polls Flask backend every 3 seconds while active
- * - Updates confirmed workers, remaining positions, and job status
+ * - Automatically stops polling if job is cancelled or completed
  * - Prevents overlapping network requests
  * - Cancels/aborts gracefully on component unmount
  */
@@ -16,12 +16,28 @@ export function useJobStatus(jobId, {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [isStopped, setIsStopped] = useState(false);
 
   const isFetchingRef = useRef(false);
   const abortControllerRef = useRef(null);
+  const timerRef = useRef(null);
+  const isStoppedRef = useRef(false);
+
+  const stopPolling = useCallback(() => {
+    isStoppedRef.current = true;
+    setIsStopped(true);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsPolling(false);
+  }, []);
 
   const fetchStatus = useCallback(async () => {
-    if (!jobId) {
+    if (!jobId || isStoppedRef.current) {
       setLoading(false);
       return;
     }
@@ -40,6 +56,10 @@ export function useJobStatus(jobId, {
 
       if (res) {
         setJobStatus(res);
+        // Automatically stop polling if job is cancelled or completed
+        if (res.status === 'cancelled' || res.status === 'completed') {
+          stopPolling();
+        }
       }
       setError(null);
     } catch (err) {
@@ -52,23 +72,29 @@ export function useJobStatus(jobId, {
       setIsPolling(false);
       isFetchingRef.current = false;
     }
-  }, [jobId]);
+  }, [jobId, stopPolling]);
 
   useEffect(() => {
-    let timerId = null;
+    isStoppedRef.current = false;
+    setIsStopped(false);
 
     if (enabled && jobId) {
       fetchStatus();
 
-      timerId = setInterval(() => {
-        fetchStatus();
+      timerRef.current = setInterval(() => {
+        if (!isStoppedRef.current) {
+          fetchStatus();
+        }
       }, pollingIntervalMs);
     } else {
       setLoading(false);
     }
 
     return () => {
-      if (timerId) clearInterval(timerId);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -76,12 +102,21 @@ export function useJobStatus(jobId, {
     };
   }, [enabled, jobId, pollingIntervalMs, fetchStatus]);
 
+  const isLive = !isStopped && jobStatus?.status !== 'cancelled' && jobStatus?.status !== 'completed';
+
   return {
     jobStatus,
     loading,
     error,
     isPolling,
-    refresh: fetchStatus
+    isLive,
+    isStopped,
+    stopPolling,
+    refresh: () => {
+      isStoppedRef.current = false;
+      setIsStopped(false);
+      fetchStatus();
+    }
   };
 }
 

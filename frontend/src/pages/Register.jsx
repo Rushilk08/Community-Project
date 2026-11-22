@@ -88,8 +88,8 @@ export default function Register() {
           <LanguageSwitcher />
         </div>
         <Link to="/" className="public-brand auth-brand">
-          <span className="brand-mark">WS</span>
-          <span>WorkSetu</span>
+          <span className="brand-mark">WL</span>
+          <span>WorkLink</span>
         </Link>
 
         {isConfirmationSent ? (
@@ -201,7 +201,7 @@ export default function Register() {
                     color: role === 'customer' ? '#173f3d' : 'var(--primary)'
                   }}
                 >
-                  WorkSetu
+                  WorkLink
                 </h2>
                 <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.25rem' }}>
                   {role === 'customer' ? `Customer ${t('register')}` : `Worker ${t('register')}`}

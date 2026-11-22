@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { createJob } from '../../services/api';
@@ -15,11 +15,95 @@ export default function PostJob() {
     wage: 850,
     workers_required: 2,
     location: '',
+    latitude: null,
+    longitude: null,
     date: new Date().toISOString().split('T')[0]
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('');
   const [error, setError] = useState(null);
+
+  // Automatically request browser GPS location on page load
+  useEffect(() => {
+    detectLocation();
+  }, []);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    setLocationStatus('Requesting browser location permission...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        setFormData((prev) => ({
+          ...prev,
+          latitude: Number(latitude.toFixed(6)),
+          longitude: Number(longitude.toFixed(6))
+        }));
+
+        setLocationStatus(`📍 GPS detected (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Fetching address...`);
+
+        // Reverse-geocode coordinates to readable address using free OpenStreetMap Nominatim
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const address = data.display_name || `${data.address?.suburb || ''}, ${data.address?.city || ''}`;
+            if (address && address.trim()) {
+              setFormData((prev) => ({
+                ...prev,
+                location: address
+              }));
+              setLocationStatus(`📍 Live location detected: ${data.address?.suburb || data.address?.city || 'Accurate GPS'}`);
+            } else {
+              setFormData((prev) => ({
+                ...prev,
+                location: prev.location || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
+              }));
+              setLocationStatus('📍 Live GPS coordinates saved');
+            }
+          } else {
+            setFormData((prev) => ({
+              ...prev,
+              location: prev.location || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
+            }));
+            setLocationStatus('📍 Live GPS coordinates saved');
+          }
+        } catch {
+          setFormData((prev) => ({
+            ...prev,
+            location: prev.location || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
+          }));
+          setLocationStatus('📍 Live GPS coordinates saved');
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (err) => {
+        setIsDetectingLocation(false);
+        if (err.code === 1) {
+          setLocationStatus('⚠️ Location permission denied. Please enter worksite address manually.');
+        } else {
+          setLocationStatus('⚠️ Could not retrieve GPS location. Please enter worksite address manually.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,9 +119,11 @@ export default function PostJob() {
       const res = await createJob({
         ...formData,
         wage: Number(formData.wage),
-        workers_required: Number(formData.workers_required)
+        workers_required: Number(formData.workers_required),
+        latitude: formData.latitude,
+        longitude: formData.longitude
       });
-      const createdJobId = res?.job?.id || 'job-101';
+      const createdJobId = res?.job?.id || res?.data?.id || 'job-101';
       navigate(`/customer/live-hiring?jobId=${createdJobId}`);
     } catch (err) {
       setError(err.message || 'Failed to post job. Please try again.');
@@ -52,7 +138,7 @@ export default function PostJob() {
         <div className="card-header">
           <h2 className="card-title">{t('postJob')}</h2>
           <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
-            Request daily-wage workers for your site. Offers will be dispatched to nearby workers immediately.
+            Request daily-wage workers for your site. Offers will be dispatched to nearby workers based on live coordinates.
           </p>
         </div>
 
@@ -151,7 +237,20 @@ export default function PostJob() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="job-location">{t('location')} *</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <label className="form-label" htmlFor="job-location" style={{ marginBottom: 0 }}>
+                {t('location')} *
+              </label>
+              <button
+                type="button"
+                onClick={detectLocation}
+                disabled={isDetectingLocation}
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                📍 {isDetectingLocation ? 'Detecting...' : 'Detect Live Location'}
+              </button>
+            </div>
             <input
               id="job-location"
               name="location"
@@ -162,6 +261,11 @@ export default function PostJob() {
               className="form-input"
               placeholder="e.g. 5th Cross, Indiranagar, Bengaluru"
             />
+            {locationStatus && (
+              <p style={{ fontSize: '0.8rem', color: formData.latitude ? '#059669' : '#b45309', marginTop: '0.25rem' }}>
+                {locationStatus}
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
