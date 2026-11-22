@@ -1,0 +1,38 @@
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import Loading from '../components/Loading';
+
+/**
+ * Route protection wrapper:
+ * 1. Checks if user is authenticated. If not, redirects to /login.
+ * 2. Checks if user role matches allowedRoles. If not, redirects to their assigned dashboard.
+ */
+export default function ProtectedRoute({ allowedRoles = [], children }) {
+  const { user, role, loading, isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return <Loading message="Verifying authentication..." />;
+  }
+
+  // Not authenticated -> redirect to login preserving intent
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // If specific roles required, verify user's role
+  if (allowedRoles.length > 0 && (!role || !allowedRoles.includes(role))) {
+    console.warn(`[ProtectedRoute] Access denied for role '${role}'. Required: ${allowedRoles.join(', ')}`);
+    // Redirect to the user's correct dashboard
+    if (role === 'customer') {
+      return <Navigate to="/customer/dashboard" replace />;
+    } else if (role === 'worker') {
+      return <Navigate to="/worker/dashboard" replace />;
+    } else {
+      return <Navigate to="/login" replace />;
+    }
+  }
+
+  return children;
+}
