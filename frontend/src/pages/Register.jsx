@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ErrorMessage from '../components/ErrorMessage';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Register() {
   const { t } = useTranslation();
@@ -57,11 +58,12 @@ export default function Register() {
   return (
     <div className="auth-page">
       <div className="auth-shell">
+      <div className="auth-language"><LanguageSwitcher /></div>
       <Link to="/" className="public-brand auth-brand"><span className="brand-mark">WS</span><span>WorkSetu</span></Link>
       <div className="auth-card">
       <div className="card">
         <div className="card-header" style={{ textAlign: 'center' }}>
-          <h2 className="card-title" style={{ fontSize: '1.5rem', color: '#1e40af' }}>WorkSetu</h2>
+          <h2 className="card-title" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}>WorkSetu</h2>
           <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.25rem' }}>
             {t('register')}
           </p>
