@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { motion } from 'framer-motion';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import useHomeScrollAnimations from '../hooks/useHomeScrollAnimations';
+
+const MotionLink = motion.create(Link);
 
 export default function Home() {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef(null);
+  useHomeScrollAnimations(rootRef);
+
+  const handleServiceTilt = (event) => {
+    if (event.pointerType === 'touch') return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const vertical = (event.clientY - bounds.top) / bounds.height - 0.5;
+    event.currentTarget.style.setProperty('--tilt-x', `${horizontal * 3}deg`);
+    event.currentTarget.style.setProperty('--tilt-y', `${vertical * -3}deg`);
+  };
+
+  const resetServiceTilt = (event) => {
+    event.currentTarget.style.setProperty('--tilt-x', '0deg');
+    event.currentTarget.style.setProperty('--tilt-y', '0deg');
+  };
 
   const services = [
     {
@@ -45,7 +66,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="public-site">
+    <div className="public-site" ref={rootRef}>
       <header className="public-nav">
         <Link to="/" className="public-brand">
           <span className="brand-mark">WL</span>
@@ -75,46 +96,66 @@ export default function Home() {
 
       <main>
         <section className="hero" id="home">
+          <div className="hero-image" aria-hidden="true" />
           <div className="hero-shape hero-shape-one" />
           <div className="hero-shape hero-shape-two" />
           <div className="hero-inner">
             <div className="hero-copy">
-              <span className="eyebrow">{t('heroEyebrow')}</span>
-              <h1>
-                {t('heroTitle')}
+              <span className="eyebrow" data-hero-reveal>{t('heroEyebrow')}</span>
+              <h1 data-hero-reveal>
+                <span aria-hidden="true">
+                  {t('heroTitle').split(/\s+/).map((word, index) => (
+                    <span className="hero-word-clip" key={`${word}-${index}`}>
+                      <span className="hero-word">{word}</span>
+                    </span>
+                  ))}
+                </span>
+                <span className="sr-only">{t('heroTitle')}</span>
               </h1>
-              <p>
+              <p data-hero-reveal>
                 {t('heroSubtitle')}
               </p>
-              <div className="hero-buttons">
-                <Link to="/customer/login" className="button button-primary">
+              <div className="hero-buttons" data-hero-reveal>
+                <MotionLink
+                  to="/customer/login"
+                  className="button button-primary"
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+                >
                   {t('hireWorkers')} <span>→</span>
-                </Link>
-                <Link to="/worker/login" className="button button-light">
+                </MotionLink>
+                <MotionLink
+                  to="/worker/login"
+                  className="button button-light"
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+                >
                   {t('findWork')} <span>→</span>
-                </Link>
+                </MotionLink>
               </div>
             </div>
           </div>
         </section>
 
         <section className="feature-wrap">
-          <div className="feature-grid">
-            <article className="feature-card">
+          <div className="feature-grid" data-scroll-reveal>
+            <article className="feature-card" data-stagger-card>
               <span className="feature-number">01</span>
               <div>
                 <h3>{t('feature1Title')}</h3>
                 <p>{t('feature1Desc')}</p>
               </div>
             </article>
-            <article className="feature-card">
+            <article className="feature-card" data-stagger-card>
               <span className="feature-number">02</span>
               <div>
                 <h3>{t('feature2Title')}</h3>
                 <p>{t('feature2Desc')}</p>
               </div>
             </article>
-            <article className="feature-card">
+            <article className="feature-card" data-stagger-card>
               <span className="feature-number">03</span>
               <div>
                 <h3>{t('feature3Title')}</h3>
@@ -124,9 +165,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="about-section" id="about">
+        <section className="about-section" id="about" data-scroll-reveal>
           <div className="about-image">
             <img
+              data-parallax="5"
               src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1100&q=85"
               alt="Construction professionals at a building site"
             />
@@ -150,16 +192,21 @@ export default function Home() {
         </section>
 
         <section className="services-section" id="services">
-          <div className="section-heading">
+          <div className="section-heading" data-scroll-reveal>
             <div>
               <span className="section-label light">{t('servicesTitle')}</span>
               <h2>{t('servicesHeading')}</h2>
             </div>
             <p>{t('servicesSub')}</p>
           </div>
-          <div className="service-grid">
+          <div className="service-grid" data-scroll-reveal>
             {services.map((svc, index) => (
-              <article className="service-card" key={svc.title}>
+              <motion.article
+                className="service-card"
+                key={svc.title}
+                onPointerMove={handleServiceTilt}
+                onPointerLeave={resetServiceTilt}
+              >
                 <img src={svc.image} alt={svc.title} />
                 <div className="service-overlay" />
                 <div className="service-content">
@@ -167,19 +214,21 @@ export default function Home() {
                   <h3>{svc.title}</h3>
                   <p>{svc.text}</p>
                 </div>
-              </article>
+              </motion.article>
             ))}
           </div>
         </section>
 
         <section className="process-section" id="how-it-works">
-          <span className="section-label">{t('navHowItWorks')}</span>
-          <h2>{t('howItWorksHeading')}</h2>
+          <div className="process-heading" data-scroll-reveal>
+            <span className="section-label">{t('navHowItWorks')}</span>
+            <h2>{t('howItWorksHeading')}</h2>
+          </div>
           <div className="process-grid">
             <div className="process-panel">
               <h3>👷 {t('forWorkers')}</h3>
               {workerSteps.map((step, i) => (
-                <div className="process-step" key={step}>
+                <div className="process-step" data-process-step key={step}>
                   <b>{i + 1}</b>
                   <p>{step}</p>
                 </div>
@@ -188,11 +237,41 @@ export default function Home() {
             <div className="process-panel customer-process">
               <h3>🏗️ {t('forCustomers')}</h3>
               {customerSteps.map((step, i) => (
-                <div className="process-step" key={step}>
+                <div className="process-step" data-process-step key={step}>
                   <b>{i + 1}</b>
                   <p>{step}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="final-cta" id="contact-cta" aria-labelledby="final-cta-heading">
+          <div className="final-cta-orbit final-cta-orbit-one" data-parallax="-8" aria-hidden="true" />
+          <div className="final-cta-orbit final-cta-orbit-two" data-parallax="6" aria-hidden="true" />
+          <div className="final-cta-content">
+            <span className="section-label light" data-final-cta-item>{t('navContact')}</span>
+            <h2 id="final-cta-heading" data-final-cta-item>{t('finalCtaHeading')}</h2>
+            <p data-final-cta-item>{t('finalCtaText')}</p>
+            <div className="final-cta-actions" data-final-cta-item>
+              <MotionLink
+                to="/customer/register"
+                className="button button-primary"
+                whileHover={{ y: -3 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+              >
+                {t('hireWorkers')} <span>→</span>
+              </MotionLink>
+              <MotionLink
+                to="/worker/register"
+                className="button button-light"
+                whileHover={{ y: -3 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+              >
+                {t('findWork')} <span>→</span>
+              </MotionLink>
             </div>
           </div>
         </section>

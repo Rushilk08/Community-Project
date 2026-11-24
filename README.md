@@ -38,6 +38,8 @@ WorkLink addresses this gap with:
 - Track accepted and pending workers in real time
 - View worker contact and experience details
 - Cancel active jobs
+- Generate an editable AI draft of a job description from its title and trade
+- Review and approve or decline worker overtime and leave requests
 
 ### For workers
 
@@ -47,6 +49,7 @@ WorkLink addresses this gap with:
 - Accept or reject offers
 - View confirmed and completed bookings
 - Create and manage worker groups
+- Request overtime pay or leave for a confirmed booking and track the customer's decision
 
 ### Platform safeguards
 
@@ -170,6 +173,8 @@ SECRET_KEY=replace-with-a-random-secret
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-2.5-flash
 
 DISPATCH_RADIUS_KM=10
 OFFER_EXPIRY_MINUTES=5
@@ -177,6 +182,9 @@ LOCATION_STALE_HOURS=24
 ```
 
 > Never expose the Supabase service-role key in frontend code or commit it to source control.
+> The WorkLink assistant and job-description generator use Gemini from the backend. Set `GEMINI_API_KEY` in `backend/.env`; never add it to `frontend/.env` or commit it.
+
+The database schema also creates worker overtime/leave requests. Customers approve or decline these from the job's Live Hiring page. An approved overtime request is recorded separately from the original wage; payments and leave-related replacement dispatch are not automated.
 
 Start the API:
 
@@ -246,6 +254,12 @@ http://localhost:5000/api
 | `POST` | `/workers/offers/:offerId/reject` | Reject an offer |
 | `GET` | `/workers/bookings` | Get worker bookings |
 | `GET` | `/bookings/:bookingId` | Get booking details |
+| `POST` | `/ai/job-description` | Generate a job-description draft (customer auth + Gemini configuration required) |
+| `POST` | `/assistant/chat` | Ask the WorkLink website assistant |
+| `POST` | `/bookings/:bookingId/requests` | Submit an overtime or leave request (worker auth required) |
+| `GET` | `/bookings/:bookingId/requests` | View booking requests (booking participants only) |
+| `GET` | `/jobs/:jobId/worker-requests` | List a customer's job requests |
+| `PATCH` | `/worker-requests/:requestId` | Approve or decline a worker request (customer auth required) |
 
 Most mutation and retrieval routes require a valid Supabase bearer token. The backend uses role checks to separate customer and worker operations.
 
@@ -281,6 +295,8 @@ npm run build
 | `SUPABASE_URL` | Supabase project URL | — |
 | `SUPABASE_ANON_KEY` | Supabase public key | — |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase privileged key | — |
+| `GEMINI_API_KEY` | Server-side key for Gemini-powered features | — |
+| `GEMINI_MODEL` | Gemini model name | `gemini-2.5-flash` |
 | `DISPATCH_RADIUS_KM` | Worker matching radius | `10` |
 | `OFFER_EXPIRY_MINUTES` | Pending offer lifetime | `5` |
 | `LOCATION_STALE_HOURS` | Maximum worker-location age | `24` |

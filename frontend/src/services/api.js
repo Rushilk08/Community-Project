@@ -83,9 +83,15 @@ export async function request(endpoint, {
 
   const url = `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-  // Build timeout signal if none provided
+  // Combine the caller's cancellation signal with the request timeout.
   const controller = new AbortController();
-  const effectiveSignal = signal || controller.signal;
+  const abortFromCaller = () => controller.abort();
+  if (signal?.aborted) {
+    controller.abort();
+  } else if (signal) {
+    signal.addEventListener('abort', abortFromCaller, { once: true });
+  }
+  const effectiveSignal = controller.signal;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -97,6 +103,7 @@ export async function request(endpoint, {
     });
 
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortFromCaller);
 
     const isJson = response.headers.get('content-type')?.includes('application/json');
     const result = isJson ? await response.json() : await response.text();
@@ -114,6 +121,22 @@ export async function request(endpoint, {
     return result;
   } catch (error) {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortFromCaller);
+
+    const backendOnlyEndpoint =
+      endpoint.startsWith('/ai/') ||
+      endpoint === '/assistant/chat' ||
+      endpoint.includes('/requests') ||
+      endpoint.includes('worker-requests') ||
+      endpoint.startsWith('/worker-requests/');
+    if (backendOnlyEndpoint) {
+      if (error.name === 'TypeError' || error.message?.includes('Failed to fetch')) {
+        throw new Error(
+          'This feature requires the WorkLink backend. Start it and configure Gemini for AI features.'
+        );
+      }
+      throw error;
+    }
 
     // If mocks enabled or network error, execute mock fallback gracefully
     if (ENABLE_MOCKS || error.name === 'TypeError' || error.message?.includes('Failed to fetch')) {
@@ -284,6 +307,57 @@ export async function createJob(jobData) {
   });
 }
 
+export async function generateJobDescription({ title, skill, signal }) {
+  const result = await request('/ai/job-description', {
+    method: 'POST',
+    data: { title, skill },
+    signal,
+    timeoutMs: 30000
+  });
+  if (typeof result?.description !== 'string' || !result.description.trim()) {
+    throw new Error('The AI service did not return a job description.');
+  }
+  return result;
+}
+
+export async function askWorkLinkAssistant(question) {
+  const result = await request('/assistant/chat', {
+    method: 'POST',
+    data: { question },
+    timeoutMs: 30000
+  });
+  if (typeof result?.answer !== 'string' || !result.answer.trim()) {
+    throw new Error('The WorkLink assistant did not return an answer.');
+  }
+  return result;
+}
+
+export async function createWorkerRequest(bookingId, requestData) {
+  return request(`/bookings/${encodeURIComponent(bookingId)}/requests`, {
+    method: 'POST',
+    data: requestData
+  });
+}
+
+export async function getBookingRequests(bookingId) {
+  return request(`/bookings/${encodeURIComponent(bookingId)}/requests`, {
+    method: 'GET'
+  });
+}
+
+export async function getJobWorkerRequests(jobId) {
+  return request(`/jobs/${encodeURIComponent(jobId)}/worker-requests`, {
+    method: 'GET'
+  });
+}
+
+export async function resolveWorkerRequest(requestId, decision) {
+  return request(`/worker-requests/${encodeURIComponent(requestId)}`, {
+    method: 'PATCH',
+    data: { decision }
+  });
+}
+
 /**
  * Customer fetches their posted jobs
  */
@@ -392,6 +466,12 @@ export async function createWorkerGroup(groupData) {
 export default {
   request,
   createJob,
+  generateJobDescription,
+  askWorkLinkAssistant,
+  createWorkerRequest,
+  getBookingRequests,
+  getJobWorkerRequests,
+  resolveWorkerRequest,
   getMyJobs,
   getJobStatus,
   cancelJob,

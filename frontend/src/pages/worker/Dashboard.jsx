@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { updateWorkerAvailability, getWorkerBookings, updateWorkerLocation, acceptOffer } from '../../services/api';
 import useWorkerOffers from '../../hooks/useWorkerOffers';
 import SlideToAccept from '../../components/SlideToAccept';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 export default function WorkerDashboard() {
   const { t } = useTranslation();
@@ -113,6 +114,10 @@ export default function WorkerDashboard() {
   return (
     <div className="dashboard-page worker-dashboard">
       <section className="dashboard-hero worker-dashboard-hero">
+        <div className="dashboard-hero-ambient" aria-hidden="true">
+          <span className="dashboard-hero-glow" />
+          <span className="dashboard-hero-light-sweep" />
+        </div>
         <div className="dashboard-hero-copy">
           <span className="dashboard-eyebrow">WORKER WORKSPACE</span>
           <h1>{t('welcome')}, {workerName}</h1>
@@ -122,9 +127,14 @@ export default function WorkerDashboard() {
           </Link>
         </div>
 
-        <div className="availability-card">
+        <div className="availability-card" data-availability={isAvailable ? 'available' : 'unavailable'}>
           <div className="availability-card-heading">
-            <span className="availability-icon" aria-hidden="true">●</span>
+            <span
+              className={`availability-icon ${isAvailable ? 'is-available' : 'is-unavailable'}`}
+              aria-hidden="true"
+            >
+              <span className="availability-icon-dot" />
+            </span>
             <div>
               <span className="dashboard-overline">YOUR STATUS</span>
               <h2>{isAvailable ? t('available') : t('unavailable')}</h2>
@@ -153,7 +163,7 @@ export default function WorkerDashboard() {
           <span className="dashboard-stat-icon offers-icon" aria-hidden="true">↗</span>
           <div>
             <p>New opportunities</p>
-            <strong>{offersLoading ? '—' : offers.length}</strong>
+            <AnimatedNumber value={offers.length} loading={offersLoading} />
             <span>{offers.length === 1 ? 'offer waiting for you' : 'offers waiting for you'}</span>
           </div>
         </article>
@@ -161,7 +171,7 @@ export default function WorkerDashboard() {
           <span className="dashboard-stat-icon bookings-icon" aria-hidden="true">✓</span>
           <div>
             <p>Accepted jobs</p>
-            <strong>{bookingsLoading ? '—' : activeBookings.length}</strong>
+            <AnimatedNumber value={activeBookings.length} loading={bookingsLoading} />
             <span>current assignments</span>
           </div>
         </article>

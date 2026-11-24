@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useJobStatus from '../../hooks/useJobStatus';
-import { cancelJob } from '../../services/api';
+import { cancelJob, getJobWorkerRequests, resolveWorkerRequest } from '../../services/api';
 import Loading from '../../components/Loading';
 import ErrorMessage from '../../components/ErrorMessage';
 
@@ -14,10 +14,46 @@ export default function LiveHiring() {
   const [approvedWorkerIds, setApprovedWorkerIds] = useState(new Set());
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [workerRequests, setWorkerRequests] = useState([]);
+  const [workerRequestsError, setWorkerRequestsError] = useState('');
+  const [resolvingRequestId, setResolvingRequestId] = useState(null);
 
   const { jobStatus, loading, error, isPolling, isLive, stopPolling, refresh } = useJobStatus(jobId);
 
   const isCancelled = jobStatus?.status === 'cancelled' || cancelSuccess;
+
+  const loadWorkerRequests = useCallback(async () => {
+    try {
+      const response = await getJobWorkerRequests(jobId);
+      setWorkerRequests(Array.isArray(response?.requests) ? response.requests : []);
+      setWorkerRequestsError('');
+    } catch (requestError) {
+      setWorkerRequestsError(requestError.message || 'Could not load worker requests.');
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    if (isCancelled) return undefined;
+
+    loadWorkerRequests();
+    const timer = window.setInterval(loadWorkerRequests, 15000);
+    return () => window.clearInterval(timer);
+  }, [isCancelled, loadWorkerRequests]);
+
+  const handleRequestDecision = async (requestId, decision) => {
+    setResolvingRequestId(requestId);
+    setWorkerRequestsError('');
+    try {
+      const response = await resolveWorkerRequest(requestId, decision);
+      setWorkerRequests((current) => current.map((item) => (
+        item.id === requestId ? { ...item, ...response.request } : item
+      )));
+    } catch (requestError) {
+      setWorkerRequestsError(requestError.message || 'Could not update the worker request.');
+    } finally {
+      setResolvingRequestId(null);
+    }
+  };
 
   const handleCancelJob = async () => {
     if (!window.confirm('Are you sure you want to cancel this job? Live hiring will stop immediately and all offers will be withdrawn.')) {
@@ -349,6 +385,71 @@ export default function LiveHiring() {
                 </div>
               )}
             </div>
+
+            <section className="customer-worker-requests card" aria-labelledby="customer-worker-requests-heading">
+              <div className="customer-worker-requests-header">
+                <div>
+                  <h3 id="customer-worker-requests-heading">{t('customerRequestsTitle')}</h3>
+                  <p>{t('customerRequestsHint')}</p>
+                </div>
+                <button type="button" className="btn btn-outline btn-sm" onClick={loadWorkerRequests}>
+                  Refresh
+                </button>
+              </div>
+
+              {workerRequestsError && (
+                <p className="worker-request-error" role="alert">{workerRequestsError}</p>
+              )}
+              {workerRequests.length === 0 ? (
+                <p className="worker-request-hint">{t('noRequests')}</p>
+              ) : (
+                <div className="customer-worker-requests-list">
+                  {workerRequests.map((workerRequest) => (
+                    <article className="worker-request-item" key={workerRequest.id}>
+                      <div className="customer-worker-request-title">
+                        <div>
+                          <strong>{workerRequest.worker_name}</strong>
+                          <span>{workerRequest.request_type === 'overtime_pay' ? t('overtimePayRequest') : t('leaveRequest')}</span>
+                        </div>
+                        <span className={`badge ${workerRequest.status === 'approved' ? 'badge-success' : workerRequest.status === 'declined' ? 'badge-danger' : 'badge-warning'}`}>
+                          {t(`requestStatus_${workerRequest.status}`)}
+                        </span>
+                      </div>
+                      {workerRequest.request_type === 'overtime_pay' ? (
+                        <p className="customer-worker-request-amount">
+                          {t('requestExtraAmount')}: ₹{Number(workerRequest.requested_extra_pay).toLocaleString()}
+                        </p>
+                      ) : (
+                        <p className="customer-worker-request-amount">
+                          {t('leaveDateForBooking')}: {workerRequest.leave_date || '—'}
+                        </p>
+                      )}
+                      <p>{workerRequest.reason}</p>
+                      {workerRequest.status === 'pending' && (
+                        <div className="customer-worker-request-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={resolvingRequestId === workerRequest.id}
+                            onClick={() => handleRequestDecision(workerRequest.id, 'approve')}
+                          >
+                            {t('approveRequest')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            disabled={resolvingRequestId === workerRequest.id}
+                            onClick={() => handleRequestDecision(workerRequest.id, 'decline')}
+                          >
+                            {t('declineRequest')}
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
 
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
               <Link to={`/customer/confirmed-workers?jobId=${jobId}`} className="btn btn-primary">

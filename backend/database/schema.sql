@@ -158,6 +158,27 @@ create table if not exists public.bookings (
   constraint unique_worker_job_booking unique (job_id, worker_id)
 );
 
+-- Worker overtime and leave requests for individual bookings
+create table if not exists public.worker_requests (
+  id uuid default gen_random_uuid() primary key,
+  booking_id uuid references public.bookings(id) on delete cascade not null,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  worker_id uuid references public.profiles(id) on delete cascade not null,
+  customer_id uuid references public.profiles(id) on delete cascade not null,
+  request_type text not null check (request_type in ('overtime_pay', 'leave')),
+  requested_extra_pay numeric check (requested_extra_pay is null or requested_extra_pay > 0),
+  leave_date date,
+  reason text not null check (length(btrim(reason)) between 5 and 500),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'declined')),
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint worker_request_type_fields check (
+    (request_type = 'overtime_pay' and requested_extra_pay is not null and leave_date is null) or
+    (request_type = 'leave' and requested_extra_pay is null and leave_date is not null)
+  )
+);
+
 -- ==============================================================================
 -- F. WORKER GROUPS TABLE
 -- ==============================================================================
@@ -219,6 +240,10 @@ create index if not exists idx_job_offers_worker_pending on public.job_offers(wo
 create index if not exists idx_job_offers_job on public.job_offers(job_id);
 create index if not exists idx_bookings_job on public.bookings(job_id);
 create index if not exists idx_bookings_worker on public.bookings(worker_id);
+create index if not exists idx_worker_requests_job_created
+  on public.worker_requests(job_id, created_at desc);
+create unique index if not exists idx_worker_requests_one_pending_per_type
+  on public.worker_requests(booking_id, request_type) where status = 'pending';
 
 -- ==============================================================================
 -- AUTH TRIGGER: AUTO PROFILE CREATION & WORKER PROFILE SYNC
@@ -458,6 +483,7 @@ alter table public.worker_profiles enable row level security;
 alter table public.jobs enable row level security;
 alter table public.job_offers enable row level security;
 alter table public.bookings enable row level security;
+alter table public.worker_requests enable row level security;
 alter table public.worker_groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.reports enable row level security;
@@ -504,6 +530,12 @@ create policy "Booking participants read bookings" on public.bookings
   for select to authenticated using (
     auth.uid() = worker_id or
     auth.uid() in (select customer_id from public.jobs where jobs.id = bookings.job_id)
+  );
+
+drop policy if exists "Booking participants read worker requests" on public.worker_requests;
+create policy "Booking participants read worker requests" on public.worker_requests
+  for select to authenticated using (
+    auth.uid() = worker_id or auth.uid() = customer_id
   );
 
 -- Reports: Users insert reports and view their own reports

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { createJob } from '../../services/api';
+import { createJob, generateJobDescription } from '../../services/api';
 import ErrorMessage from '../../components/ErrorMessage';
 
 export default function PostJob() {
@@ -24,6 +24,16 @@ export default function PostJob() {
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState('');
   const [error, setError] = useState(null);
+  const [descriptionStatus, setDescriptionStatus] = useState('');
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const descriptionEditedRef = useRef(false);
+  const descriptionEditVersionRef = useRef(0);
+  const titleRef = useRef(formData.title);
+  const skillRef = useRef(formData.skill);
+  const generationControllerRef = useRef(null);
+
+  titleRef.current = formData.title;
+  skillRef.current = formData.skill;
 
   // Automatically request browser GPS location on page load
   useEffect(() => {
@@ -107,8 +117,68 @@ export default function PostJob() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'description') {
+      descriptionEditedRef.current = true;
+      descriptionEditVersionRef.current += 1;
+      setDescriptionStatus(t('descriptionEdited'));
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  const runDescriptionGeneration = useCallback(async ({ force = false } = {}) => {
+    const title = formData.title.trim();
+    const skill = formData.skill.trim();
+    if (title.length < 3 || (!force && descriptionEditedRef.current)) return;
+
+    generationControllerRef.current?.abort();
+    const controller = new AbortController();
+    const editVersion = descriptionEditVersionRef.current;
+    generationControllerRef.current = controller;
+    setIsGeneratingDescription(true);
+    setDescriptionStatus(t('generatingJobDescription'));
+
+    try {
+      const result = await generateJobDescription({
+        title,
+        skill,
+        signal: controller.signal
+      });
+      if (
+        controller.signal.aborted ||
+        titleRef.current.trim() !== title ||
+        skillRef.current !== skill ||
+        descriptionEditVersionRef.current !== editVersion
+      ) {
+        return;
+      }
+
+      setFormData((prev) => ({ ...prev, description: result.description }));
+      descriptionEditedRef.current = false;
+      setDescriptionStatus(t('jobDescriptionAiReady'));
+    } catch (generationError) {
+      if (!controller.signal.aborted) {
+        setDescriptionStatus(generationError.message || t('jobDescriptionAiUnavailable'));
+      }
+    } finally {
+      if (generationControllerRef.current === controller) {
+        generationControllerRef.current = null;
+        setIsGeneratingDescription(false);
+      }
+    }
+  }, [formData.skill, formData.title, t]);
+
+  useEffect(() => {
+    if (formData.title.trim().length < 3 || descriptionEditedRef.current) return undefined;
+
+    const timer = window.setTimeout(() => {
+      runDescriptionGeneration();
+    }, 650);
+
+    return () => {
+      window.clearTimeout(timer);
+      generationControllerRef.current?.abort();
+    };
+  }, [formData.skill, formData.title, runDescriptionGeneration]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -160,7 +230,17 @@ export default function PostJob() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="job-desc">{t('jobDescription')} *</label>
+            <div className="job-description-label">
+              <label className="form-label" htmlFor="job-desc">{t('jobDescription')} *</label>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => runDescriptionGeneration({ force: true })}
+                disabled={isGeneratingDescription || formData.title.trim().length < 3}
+              >
+                {isGeneratingDescription ? t('generatingJobDescription') : t('generateJobDescription')}
+              </button>
+            </div>
             <textarea
               id="job-desc"
               name="description"
@@ -171,6 +251,9 @@ export default function PostJob() {
               className="form-textarea"
               placeholder="Describe the tasks, working hours, and tools required..."
             />
+            <p className="job-description-status" role="status" aria-live="polite">
+              {descriptionStatus || t('jobDescriptionAiHint')}
+            </p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

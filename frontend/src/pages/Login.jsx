@@ -179,32 +179,6 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="auth-alt-prompt">
-              {isCustomer ? (
-                <p>
-                  Looking for daily work?{' '}
-                  <button
-                    type="button"
-                    onClick={() => handleRoleSwitch('worker')}
-                    className="auth-switch-link"
-                  >
-                    Switch to Worker Login
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  Need to hire workers?{' '}
-                  <button
-                    type="button"
-                    onClick={() => handleRoleSwitch('customer')}
-                    className="auth-switch-link"
-                  >
-                    Switch to Customer Login
-                  </button>
-                </p>
-              )}
-            </div>
-
             <div
               style={{
                 textAlign: 'center',
@@ -221,7 +195,8 @@ export default function Login() {
           </div>
         </div>
         <Link to="/" className="auth-home-link">
-          ← {t('home')}
+          <span className="auth-home-icon" aria-hidden="true">←</span>
+          <span>{t('home')}</span>
         </Link>
       </div>
     </div>

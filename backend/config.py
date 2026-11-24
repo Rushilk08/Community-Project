@@ -14,6 +14,10 @@ class Config:
     SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
+    # Gemini integration (keep the API key on the server)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
     # Matching & Legal Dispatch Parameters
     DEFAULT_DISPATCH_RADIUS_KM = float(os.getenv("DISPATCH_RADIUS_KM", 10.0))
     OFFER_EXPIRY_MINUTES = int(os.getenv("OFFER_EXPIRY_MINUTES", 5))

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { getMyJobs } from '../../services/api';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 function getJobStatus(job) {
   return String(job.status || 'Open').replace(/[_-]/g, ' ');
@@ -49,6 +50,10 @@ export default function CustomerDashboard() {
   return (
     <div className="dashboard-page customer-dashboard">
       <section className="dashboard-hero customer-dashboard-hero">
+        <div className="dashboard-hero-ambient" aria-hidden="true">
+          <span className="dashboard-hero-glow" />
+          <span className="dashboard-hero-light-sweep" />
+        </div>
         <div className="dashboard-hero-copy">
           <span className="dashboard-eyebrow">CUSTOMER WORKSPACE</span>
           <h1>{t('welcome')}, {customerName}</h1>
@@ -79,7 +84,7 @@ export default function CustomerDashboard() {
           <span className="dashboard-stat-icon offers-icon" aria-hidden="true">▤</span>
           <div>
             <p>Total jobs</p>
-            <strong>{loading ? '—' : jobs.length}</strong>
+            <AnimatedNumber value={jobs.length} loading={loading} />
             <span>requests you have posted</span>
           </div>
         </article>
@@ -87,7 +92,7 @@ export default function CustomerDashboard() {
           <span className="dashboard-stat-icon bookings-icon" aria-hidden="true">◷</span>
           <div>
             <p>Active jobs</p>
-            <strong>{loading ? '—' : activeJobs.length}</strong>
+            <AnimatedNumber value={activeJobs.length} loading={loading} />
             <span>open or in progress</span>
           </div>
         </article>
@@ -95,7 +100,7 @@ export default function CustomerDashboard() {
           <span className="dashboard-stat-icon skill-icon" aria-hidden="true">✓</span>
           <div>
             <p>Workers confirmed</p>
-            <strong>{loading ? '—' : confirmedWorkers}</strong>
+            <AnimatedNumber value={confirmedWorkers} loading={loading} />
             <span>across your posted jobs</span>
           </div>
         </article>

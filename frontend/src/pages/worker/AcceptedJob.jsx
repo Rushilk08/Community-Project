@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getWorkerBookings } from '../../services/api';
+import { createWorkerRequest, getBookingRequests, getWorkerBookings } from '../../services/api';
 import Loading from '../../components/Loading';
 
 export default function AcceptedJob() {
   const { t } = useTranslation();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState([]);
+  const [requestType, setRequestType] = useState('overtime_pay');
+  const [requestedExtraPay, setRequestedExtraPay] = useState('');
+  const [requestReason, setRequestReason] = useState('');
+  const [requestError, setRequestError] = useState('');
+  const [requestMessage, setRequestMessage] = useState('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
   useEffect(() => {
     async function fetchBooking() {
       try {
         const res = await getWorkerBookings();
-        const active = res?.bookings?.[0] || null;
+        const active = res?.bookings?.find((item) => ['confirmed', 'in_progress'].includes(item.status)) || null;
         setBooking(active);
+        if (active?.id) {
+          try {
+            const requestResponse = await getBookingRequests(active.id);
+            setRequests(Array.isArray(requestResponse?.requests) ? requestResponse.requests : []);
+          } catch (requestLoadError) {
+            setRequestError(requestLoadError.message || 'Could not load worker requests.');
+          }
+        }
       } catch (err) {
         console.warn('Booking fetch warning:', err.message);
       } finally {
@@ -23,6 +38,35 @@ export default function AcceptedJob() {
     }
     fetchBooking();
   }, []);
+
+  const handleRequestSubmit = async (event) => {
+    event.preventDefault();
+    if (!booking?.id) return;
+
+    setIsSubmittingRequest(true);
+    setRequestError('');
+    setRequestMessage('');
+    try {
+      const requestData = {
+        request_type: requestType,
+        reason: requestReason.trim(),
+        ...(requestType === 'overtime_pay' ? { requested_extra_pay: Number(requestedExtraPay) } : {})
+      };
+      const response = await createWorkerRequest(booking.id, requestData);
+      setRequests((current) => [response.request, ...current]);
+      setRequestReason('');
+      setRequestedExtraPay('');
+      setRequestMessage(t('requestSent'));
+    } catch (err) {
+      setRequestError(err.message || 'Could not send your request.');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
+  const approvedOvertimeTotal = requests
+    .filter((item) => item.request_type === 'overtime_pay' && item.status === 'approved')
+    .reduce((total, item) => total + (Number(item.requested_extra_pay) || 0), 0);
 
   const handleNavigate = () => {
     if (booking?.location) {
@@ -53,6 +97,11 @@ export default function AcceptedJob() {
               <p style={{ color: '#15803d', fontSize: '1.1rem', fontWeight: 700, marginTop: '0.25rem' }}>
                 ₹{booking.wage} / day
               </p>
+              {approvedOvertimeTotal > 0 && (
+                <p className="approved-overtime-total">
+                  {t('approvedOvertimeAddOns')}: ₹{approvedOvertimeTotal.toLocaleString()}
+                </p>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -81,6 +130,85 @@ export default function AcceptedJob() {
                 </button>
               </div>
             </div>
+
+            {['confirmed', 'in_progress'].includes(booking.status) && (
+              <section className="worker-request-panel" aria-labelledby="worker-request-heading">
+                <h3 id="worker-request-heading">{t('workerRequestTitle')}</h3>
+                <p className="worker-request-hint">
+                  {t('leaveDateForBooking')}: {booking.date || '—'}. The customer must approve or decline each request.
+                </p>
+                <form onSubmit={handleRequestSubmit}>
+                  <label className="form-label" htmlFor="worker-request-type">{t('requestType')}</label>
+                  <select
+                    id="worker-request-type"
+                    className="form-select"
+                    value={requestType}
+                    onChange={(event) => setRequestType(event.target.value)}
+                  >
+                    <option value="overtime_pay">{t('overtimePayRequest')}</option>
+                    <option value="leave">{t('leaveRequest')}</option>
+                  </select>
+
+                  {requestType === 'overtime_pay' && (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="worker-request-amount">{t('requestExtraAmount')}</label>
+                      <input
+                        id="worker-request-amount"
+                        className="form-input"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        value={requestedExtraPay}
+                        onChange={(event) => setRequestedExtraPay(event.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="worker-request-reason">{t('requestReason')}</label>
+                    <textarea
+                      id="worker-request-reason"
+                      className="form-textarea"
+                      minLength={5}
+                      maxLength={500}
+                      required
+                      rows={3}
+                      value={requestReason}
+                      onChange={(event) => setRequestReason(event.target.value)}
+                      placeholder={t('requestReasonPlaceholder')}
+                    />
+                  </div>
+
+                  {requestError && <p className="worker-request-error" role="alert">{requestError}</p>}
+                  {requestMessage && <p className="worker-request-success" role="status">{requestMessage}</p>}
+                  <button type="submit" className="btn btn-primary" disabled={isSubmittingRequest}>
+                    {isSubmittingRequest ? t('loading') : t('submitRequest')}
+                  </button>
+                </form>
+
+                <div className="worker-request-history">
+                  <h4>{t('requestHistory')}</h4>
+                  {requests.length === 0 ? (
+                    <p className="worker-request-hint">{t('noRequests')}</p>
+                  ) : requests.map((item) => (
+                    <article className="worker-request-item" key={item.id}>
+                      <div>
+                        <strong>{item.request_type === 'overtime_pay' ? t('overtimePayRequest') : t('leaveRequest')}</strong>
+                        {item.request_type === 'overtime_pay' && (
+                          <span> · ₹{Number(item.requested_extra_pay).toLocaleString()}</span>
+                        )}
+                        {item.request_type === 'leave' && item.leave_date && <span> · {item.leave_date}</span>}
+                      </div>
+                      <span className={`badge ${item.status === 'approved' ? 'badge-success' : item.status === 'declined' ? 'badge-danger' : 'badge-warning'}`}>
+                        {t(`requestStatus_${item.status}`)}
+                      </span>
+                      <p>{item.reason}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
