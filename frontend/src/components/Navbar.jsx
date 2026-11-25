@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import LanguageSwitcher from './LanguageSwitcher';
+import NotificationCenter from './NotificationCenter';
 import useWorkerOffers from '../hooks/useWorkerOffers';
 import SlideToAccept from './SlideToAccept';
 import { acceptOffer } from '../services/api';
@@ -178,12 +179,13 @@ export default function Navbar() {
           </ul>
         </nav>
 
-        {/* Right side actions: Language Switcher, User badge, Logout */}
+        {/* Right side actions: Language Switcher, Notifications, User badge, Logout */}
         <div className="nav-actions">
           <LanguageSwitcher />
 
           {isAuthenticated && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <NotificationCenter />
               <span
                 className={`badge ${isCustomer ? 'badge-neutral' : 'badge-success'}`}
                 title={user?.email}

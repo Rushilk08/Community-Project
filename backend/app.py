@@ -11,6 +11,13 @@ from routes.groups import groups_bp
 from routes.reports import reports_bp
 from routes.ai import ai_bp
 from routes.worker_requests import worker_requests_bp
+from routes.referrals import referrals_bp
+from routes.leaves import leaves_bp
+from routes.cancellations import cancellations_bp
+from routes.reviews import reviews_bp
+from routes.availability import availability_bp
+from routes.replacements import replacements_bp
+from routes.notifications import notifications_bp
 from services.dispatch import expire_stale_offers_sweep
 
 def create_app():
@@ -29,6 +36,13 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix="/api")
     app.register_blueprint(ai_bp, url_prefix="/api")
     app.register_blueprint(worker_requests_bp, url_prefix="/api")
+    app.register_blueprint(referrals_bp, url_prefix="/api")
+    app.register_blueprint(leaves_bp, url_prefix="/api")
+    app.register_blueprint(cancellations_bp, url_prefix="/api")
+    app.register_blueprint(reviews_bp, url_prefix="/api")
+    app.register_blueprint(availability_bp, url_prefix="/api")
+    app.register_blueprint(replacements_bp, url_prefix="/api")
+    app.register_blueprint(notifications_bp, url_prefix="/api")
 
     # Periodic background sweep helper endpoint (can be called by cron or during polling)
     @app.route("/api/dispatch/sweep", methods=["POST", "GET"])

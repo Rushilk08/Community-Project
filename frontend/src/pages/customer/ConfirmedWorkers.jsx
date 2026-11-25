@@ -158,7 +158,7 @@ export default function ConfirmedWorkers() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     {worker.phone && (
                       <a
                         href={`tel:${worker.phone}`}
@@ -168,6 +168,14 @@ export default function ConfirmedWorkers() {
                         📞 Call Worker
                       </a>
                     )}
+                    <Link
+                      to={`/customer/dashboard`}
+                      className="btn btn-outline btn-sm"
+                      style={{ fontSize: '0.8rem', color: '#ea580c', borderColor: '#fdba74' }}
+                      title="Initiate emergency replacement for this worker"
+                    >
+                      🚨 Find Replacement
+                    </Link>
                   </div>
                 </div>
 

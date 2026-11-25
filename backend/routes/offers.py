@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
 from services.auth import require_auth
 from services.dispatch import reassign_job_offer
+from services.availability import check_worker_conflict
 from database.supabase_client import get_service_client
 from config import Config
 
@@ -36,6 +37,23 @@ def accept_offer(offer_id: str):
 
     try:
         client = get_service_client()
+
+        # Check for scheduling conflicts with worker's existing commitments before accepting
+        offer_check = client.table("job_offers").select("*, jobs(*)").eq("id", offer_id).eq("worker_id", worker_id).maybe_single().execute()
+        if offer_check and offer_check.data:
+            job_info = offer_check.data.get("jobs") or {}
+            job_date = job_info.get("job_date") or job_info.get("date")
+            start_time = job_info.get("start_time") or "09:00"
+            duration = float(job_info.get("duration_hours") or 8.0)
+            if job_date:
+                conflict = check_worker_conflict(worker_id, job_date, start_time, duration, exclude_job_id=job_info.get("id"))
+                if conflict.get("conflict"):
+                    return jsonify({
+                        "success": False,
+                        "message": conflict.get("reason"),
+                        "error_code": "CONFLICT_DETECTED",
+                        "conflict_details": conflict
+                    }), 400
 
         # Execute atomic PostgreSQL RPC function
         try:

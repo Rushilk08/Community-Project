@@ -9,8 +9,11 @@ from app import create_app
 from services.matching import haversine_distance
 from services.validation import validate_coordinates, validate_job_posting
 
+from config import Config
+
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setattr(Config, "is_supabase_configured", classmethod(lambda cls: False))
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as test_client:

@@ -139,6 +139,7 @@ JOB_DESCRIPTION_SYSTEM_INSTRUCTION = (
 )
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+VERTEX_EXPRESS_API_URL = "https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent"
 
 
 def _generate_content(
@@ -152,26 +153,63 @@ def _generate_content(
             "Gemini is not configured. Add GEMINI_API_KEY to backend/.env and restart the API."
         )
 
-    url = GEMINI_API_URL.format(model=Config.GEMINI_MODEL)
-    try:
-        response = requests.post(
-            url,
-            headers={"x-goog-api-key": api_key},
-            json={
-                "systemInstruction": {"parts": [{"text": system_instruction}]},
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": generation_config
-            },
-            timeout=(3, 25)
-        )
-    except requests.RequestException as error:
-        raise AIServiceError("Could not reach the Gemini AI service. Please try again.") from error
+    configured_model = (Config.GEMINI_MODEL or "gemini-2.5-flash").strip().removeprefix("models/")
+    fallback_models = [configured_model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+    models_to_try = list(dict.fromkeys(m for m in fallback_models if m))
+
+    is_vertex_express = api_key.startswith("AQ.")
+    endpoints = (
+        [VERTEX_EXPRESS_API_URL, GEMINI_API_URL]
+        if is_vertex_express
+        else [GEMINI_API_URL]
+    )
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": generation_config
+    }
+
+    response = None
+    for endpoint_tpl in endpoints:
+        for model_name in models_to_try:
+            url = endpoint_tpl.format(model=model_name)
+            headers = {"Content-Type": "application/json"}
+            params = None
+            if endpoint_tpl == VERTEX_EXPRESS_API_URL:
+                params = {"key": api_key}
+            else:
+                headers["x-goog-api-key"] = api_key
+
+            try:
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=payload,
+                    timeout=(3, 25)
+                )
+            except requests.RequestException as error:
+                raise AIServiceError("Could not reach the Gemini AI service. Please try again.") from error
+
+            if response.status_code != 404:
+                break
+        if response is not None and response.status_code != 404:
+            break
 
     if response.status_code in (401, 403):
         raise AIConfigurationError("Gemini rejected the server API key. Check GEMINI_API_KEY.")
     if not response.ok:
+        detail = ""
+        try:
+            err_body = response.json()
+            if isinstance(err_body, dict):
+                detail = err_body.get("error", {}).get("message", "")
+        except Exception:
+            detail = ""
+        suffix = f" ({detail})" if detail else ""
         raise AIServiceError(
-            f"Gemini could not complete the request (HTTP {response.status_code}). Please try again."
+            f"Gemini could not complete the request (HTTP {response.status_code}){suffix}. Please try again."
         )
 
     try:

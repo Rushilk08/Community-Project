@@ -463,6 +463,197 @@ export async function createWorkerGroup(groupData) {
   });
 }
 
+// ============================================================================
+// 1. WORKER REFERRALS API
+// ============================================================================
+
+export async function getAvailableJobsForReferral() {
+  return request('/referrals/available-jobs', { method: 'GET' });
+}
+
+export async function submitWorkerReferral(referralData) {
+  return request('/referrals', {
+    method: 'POST',
+    data: referralData
+  });
+}
+
+export async function getMyReferrals() {
+  return request('/referrals/my-referrals', { method: 'GET' });
+}
+
+export async function getCustomerReferrals() {
+  return request('/referrals/customer', { method: 'GET' });
+}
+
+export async function resolveReferral(referralId, decision) {
+  return request(`/referrals/${referralId}/decision`, {
+    method: 'PATCH',
+    data: { decision }
+  });
+}
+
+export async function claimReferralInvite(referralId) {
+  return request(`/referrals/invite/${referralId}/claim`, { method: 'POST' });
+}
+
+// ============================================================================
+// 2. LEAVE MANAGEMENT API
+// ============================================================================
+
+export async function applyForLeave(leaveData) {
+  return request('/leaves', {
+    method: 'POST',
+    data: leaveData
+  });
+}
+
+export async function getMyLeaves() {
+  return request('/leaves/my-leaves', { method: 'GET' });
+}
+
+export async function getCustomerLeaves() {
+  return request('/leaves/customer', { method: 'GET' });
+}
+
+export async function resolveLeaveRequest(leaveId, decision, reviewNotes = '') {
+  return request(`/leaves/${leaveId}/decision`, {
+    method: 'PATCH',
+    data: { decision, review_notes: reviewNotes }
+  });
+}
+
+export async function cancelMyLeave(leaveId) {
+  return request(`/leaves/${leaveId}/cancel`, { method: 'PATCH' });
+}
+
+// ============================================================================
+// 3. JOB CANCELLATION APPROVAL WORKFLOW API
+// ============================================================================
+
+export async function requestJobCancellation(cancellationData) {
+  return request('/cancellations', {
+    method: 'POST',
+    data: cancellationData
+  });
+}
+
+export async function getMyCancellations() {
+  return request('/cancellations/my', { method: 'GET' });
+}
+
+export async function getCustomerCancellations() {
+  return request('/cancellations/customer', { method: 'GET' });
+}
+
+export async function resolveCancellationRequest(cancellationId, decision) {
+  return request(`/cancellations/${cancellationId}/decision`, {
+    method: 'PATCH',
+    data: { decision }
+  });
+}
+
+// ============================================================================
+// 4. WORKER RATINGS & REVIEWS API
+// ============================================================================
+
+export async function submitWorkerReview(reviewData) {
+  return request('/reviews', {
+    method: 'POST',
+    data: reviewData
+  });
+}
+
+export async function getWorkerReliability(workerId) {
+  return request(`/workers/${workerId}/reliability`, { method: 'GET' });
+}
+
+export async function reportWorkerReview(reviewId, reportReason) {
+  return request(`/reviews/${reviewId}/report`, {
+    method: 'POST',
+    data: { report_reason: reportReason }
+  });
+}
+
+// ============================================================================
+// 5. SMART WORKER AVAILABILITY & CALENDAR API
+// ============================================================================
+
+export async function getWorkerAvailabilityCalendar(year, month) {
+  const query = (year && month) ? `?year=${year}&month=${month}` : '';
+  return request(`/workers/availability-calendar${query}`, { method: 'GET' });
+}
+
+export async function checkJobAvailabilityConflict(params) {
+  return request('/workers/check-conflict', {
+    method: 'POST',
+    data: params
+  });
+}
+
+// ============================================================================
+// 6. EMERGENCY WORKER REPLACEMENT API
+// ============================================================================
+
+export async function createReplacementRequest(replacementData) {
+  return request('/replacements', {
+    method: 'POST',
+    data: replacementData
+  });
+}
+
+export async function getReplacementCandidates({ skill = '', date = '', startTime = '09:00', duration = 8 } = {}) {
+  const q = new URLSearchParams({
+    skill,
+    date,
+    start_time: startTime,
+    duration: String(duration)
+  }).toString();
+  return request(`/replacements/candidates?${q}`, { method: 'GET' });
+}
+
+export async function sendReplacementInvitations(replacementId, workerIds) {
+  return request(`/replacements/${replacementId}/invite`, {
+    method: 'POST',
+    data: { worker_ids: workerIds }
+  });
+}
+
+export async function getWorkerReplacementInvitations() {
+  return request('/replacements/worker-invitations', { method: 'GET' });
+}
+
+export async function respondReplacementInvitation(invitationId, decision) {
+  return request(`/replacements/invitations/${invitationId}/respond`, {
+    method: 'POST',
+    data: { decision }
+  });
+}
+
+export async function confirmReplacementSelection(replacementId, workerId) {
+  return request(`/replacements/${replacementId}/confirm`, {
+    method: 'POST',
+    data: { worker_id: workerId }
+  });
+}
+
+// ============================================================================
+// 7. INTEGRATED NOTIFICATIONS API
+// ============================================================================
+
+export async function getNotifications(unreadOnly = false) {
+  const q = unreadOnly ? '?unread_only=true' : '';
+  return request(`/notifications${q}`, { method: 'GET' });
+}
+
+export async function markNotificationAsRead(notificationId) {
+  return request(`/notifications/${notificationId}/read`, { method: 'PATCH' });
+}
+
+export async function markAllNotificationsAsRead() {
+  return request('/notifications/mark-all-read', { method: 'POST' });
+}
+
 export default {
   request,
   createJob,
@@ -482,5 +673,34 @@ export default {
   rejectOffer,
   getWorkerBookings,
   getBookingDetails,
-  createWorkerGroup
+  createWorkerGroup,
+  getAvailableJobsForReferral,
+  submitWorkerReferral,
+  getMyReferrals,
+  getCustomerReferrals,
+  resolveReferral,
+  claimReferralInvite,
+  applyForLeave,
+  getMyLeaves,
+  getCustomerLeaves,
+  resolveLeaveRequest,
+  cancelMyLeave,
+  requestJobCancellation,
+  getMyCancellations,
+  getCustomerCancellations,
+  resolveCancellationRequest,
+  submitWorkerReview,
+  getWorkerReliability,
+  reportWorkerReview,
+  getWorkerAvailabilityCalendar,
+  checkJobAvailabilityConflict,
+  createReplacementRequest,
+  getReplacementCandidates,
+  sendReplacementInvitations,
+  getWorkerReplacementInvitations,
+  respondReplacementInvitation,
+  confirmReplacementSelection,
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
 };

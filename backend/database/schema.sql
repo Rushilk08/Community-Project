@@ -35,6 +35,16 @@ create table if not exists public.profiles (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+alter table public.profiles add column if not exists preferred_language text not null default 'en';
+alter table public.profiles add column if not exists adult_eligibility_confirmed boolean not null default false;
+alter table public.profiles add column if not exists terms_accepted_at timestamp with time zone;
+alter table public.profiles add column if not exists privacy_notice_acknowledged_at timestamp with time zone;
+alter table public.profiles add column if not exists skill text;
+alter table public.profiles add column if not exists location text default 'Bengaluru, Karnataka';
+alter table public.profiles add column if not exists organization text;
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists is_available boolean default true;
+
 -- ==============================================================================
 -- B. WORKER PROFILES TABLE (Worker Geo, Skills, and Availability)
 -- ==============================================================================
@@ -80,6 +90,21 @@ create table if not exists public.jobs (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table public.jobs add column if not exists required_skill text;
+alter table public.jobs add column if not exists workers_needed integer default 1;
+alter table public.jobs add column if not exists wage_per_worker numeric default 0;
+alter table public.jobs add column if not exists job_date date default current_date;
+alter table public.jobs add column if not exists start_time text default '09:00';
+alter table public.jobs add column if not exists duration_hours numeric default 8;
+alter table public.jobs add column if not exists worksite_address text;
+alter table public.jobs add column if not exists latitude double precision;
+alter table public.jobs add column if not exists longitude double precision;
+alter table public.jobs add column if not exists skill text;
+alter table public.jobs add column if not exists wage numeric;
+alter table public.jobs add column if not exists workers_required integer;
+alter table public.jobs add column if not exists location text;
+alter table public.jobs add column if not exists date text;
 
 -- Trigger to keep compatibility columns in sync for jobs
 create or replace function public.sync_job_compatibility_fields()
@@ -153,10 +178,13 @@ create table if not exists public.bookings (
   status text not null default 'confirmed' check (status in ('confirmed', 'in_progress', 'completed', 'cancelled')),
   confirmed_at timestamp with time zone default timezone('utc'::text, now()) not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
   
   -- Database safeguard: One worker cannot be booked twice for the same job
   constraint unique_worker_job_booking unique (job_id, worker_id)
 );
+
+alter table public.bookings add column if not exists updated_at timestamp with time zone default timezone('utc'::text, now()) not null;
 
 -- Worker overtime and leave requests for individual bookings
 create table if not exists public.worker_requests (
@@ -551,3 +579,165 @@ create policy "Users read own reports" on public.reports
 drop policy if exists "Audit logs read restriction" on public.audit_logs;
 create policy "Audit logs read restriction" on public.audit_logs
   for select to authenticated using (auth.uid() = actor_id);
+
+
+-- ==============================================================================
+-- J. WORKER REFERRALS TABLE (Recommend Someone to Fill Vacancies)
+-- ==============================================================================
+create table if not exists public.worker_referrals (
+  id uuid default gen_random_uuid() primary key,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  referring_worker_id uuid references public.profiles(id) on delete cascade not null,
+  candidate_name text not null,
+  candidate_phone text not null,
+  candidate_skills text not null,
+  experience text,
+  location text,
+  notes text,
+  consent_confirmed boolean not null default true,
+  registered_user_id uuid references public.profiles(id) on delete set null,
+  status text not null default 'pending' check (status in ('pending', 'invited', 'registered', 'accepted', 'rejected', 'expired')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint unique_candidate_per_job unique (job_id, candidate_phone)
+);
+
+-- ==============================================================================
+-- K. LEAVE APPLICATIONS TABLE (Multi-day & Emergency Leave Management)
+-- ==============================================================================
+create table if not exists public.leave_applications (
+  id uuid default gen_random_uuid() primary key,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  booking_id uuid references public.bookings(id) on delete cascade not null,
+  worker_id uuid references public.profiles(id) on delete cascade not null,
+  customer_id uuid references public.profiles(id) on delete cascade not null,
+  start_date date not null,
+  end_date date not null,
+  reason text not null check (length(btrim(reason)) >= 3),
+  description text,
+  is_emergency boolean not null default false,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  review_notes text,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint check_leave_dates check (end_date >= start_date)
+);
+
+-- ==============================================================================
+-- L. JOB CANCELLATION REQUESTS TABLE (Customer-Approval Gated)
+-- ==============================================================================
+create table if not exists public.job_cancellation_requests (
+  id uuid default gen_random_uuid() primary key,
+  booking_id uuid references public.bookings(id) on delete cascade not null,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  worker_id uuid references public.profiles(id) on delete cascade not null,
+  customer_id uuid references public.profiles(id) on delete cascade not null,
+  reason text not null check (length(btrim(reason)) >= 3),
+  explanation text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create unique index if not exists idx_cancellation_pending_booking
+  on public.job_cancellation_requests(booking_id) where status = 'pending';
+
+-- ==============================================================================
+-- M. WORKER REVIEWS TABLE (5-Category Verified Rating & Feedback)
+-- ==============================================================================
+create table if not exists public.worker_reviews (
+  id uuid default gen_random_uuid() primary key,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  booking_id uuid references public.bookings(id) on delete cascade not null,
+  customer_id uuid references public.profiles(id) on delete cascade not null,
+  worker_id uuid references public.profiles(id) on delete cascade not null,
+  punctuality_rating integer not null check (punctuality_rating between 1 and 5),
+  quality_rating integer not null check (quality_rating between 1 and 5),
+  professionalism_rating integer not null check (professionalism_rating between 1 and 5),
+  reliability_rating integer not null check (reliability_rating between 1 and 5),
+  communication_rating integer not null check (communication_rating between 1 and 5),
+  overall_rating numeric not null check (overall_rating between 1.0 and 5.0),
+  review_text text,
+  is_reported boolean not null default false,
+  report_reason text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint unique_worker_review_per_job unique (job_id, worker_id)
+);
+
+-- ==============================================================================
+-- N. EMERGENCY WORKER REPLACEMENT & INVITATIONS
+-- ==============================================================================
+create table if not exists public.emergency_replacements (
+  id uuid default gen_random_uuid() primary key,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  customer_id uuid references public.profiles(id) on delete cascade not null,
+  original_worker_id uuid references public.profiles(id) on delete set null,
+  original_booking_id uuid references public.bookings(id) on delete set null,
+  trigger_reason text not null check (trigger_reason in ('approved_leave', 'emergency_unavailability', 'approved_cancellation', 'no_show', 'other')),
+  replacement_date date not null,
+  start_time text default '09:00',
+  duration_hours numeric default 8 check (duration_hours > 0),
+  required_skill text not null,
+  workers_needed integer not null default 1 check (workers_needed > 0),
+  additional_notes text,
+  status text not null default 'searching' check (status in ('searching', 'invitations_sent', 'worker_interested', 'pending_customer_confirmation', 'confirmed', 'unavailable', 'cancelled')),
+  confirmed_worker_id uuid references public.profiles(id) on delete set null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.emergency_replacements alter column original_worker_id drop not null;
+
+create table if not exists public.replacement_invitations (
+  id uuid default gen_random_uuid() primary key,
+  replacement_id uuid references public.emergency_replacements(id) on delete cascade not null,
+  job_id uuid references public.jobs(id) on delete cascade not null,
+  worker_id uuid references public.profiles(id) on delete cascade not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected', 'expired')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint unique_worker_per_replacement unique (replacement_id, worker_id)
+);
+
+-- ==============================================================================
+-- O. NOTIFICATIONS TABLE
+-- ==============================================================================
+create table if not exists public.notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text not null,
+  message text not null,
+  type text not null default 'general',
+  data jsonb default '{}'::jsonb,
+  is_read boolean not null default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_notifications_user_unread on public.notifications(user_id, is_read, created_at desc);
+create index if not exists idx_referrals_job on public.worker_referrals(job_id);
+create index if not exists idx_referrals_worker on public.worker_referrals(referring_worker_id);
+create index if not exists idx_leaves_worker on public.leave_applications(worker_id);
+create index if not exists idx_leaves_job on public.leave_applications(job_id);
+create index if not exists idx_cancellations_booking on public.job_cancellation_requests(booking_id);
+create index if not exists idx_cancellations_job on public.job_cancellation_requests(job_id);
+create index if not exists idx_reviews_worker on public.worker_reviews(worker_id);
+create index if not exists idx_replacements_job on public.emergency_replacements(job_id);
+create index if not exists idx_replacement_invitations_worker on public.replacement_invitations(worker_id);
+
+
+-- ==============================================================================
+-- P. PERMISSIONS & ROLE GRANTS (service_role, authenticated, anon)
+-- ==============================================================================
+grant usage on schema public to postgres, anon, authenticated, service_role;
+grant all privileges on all tables in schema public to postgres, anon, authenticated, service_role;
+grant all privileges on all sequences in schema public to postgres, anon, authenticated, service_role;
+grant all privileges on all routines in schema public to postgres, anon, authenticated, service_role;
+
+alter default privileges in schema public grant all on tables to postgres, anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to postgres, anon, authenticated, service_role;
+alter default privileges in schema public grant all on routines to postgres, anon, authenticated, service_role;
+
+-- Reload PostgREST schema cache so newly created tables/columns are immediately visible
+notify pgrst, 'reload schema';

@@ -75,13 +75,19 @@ def require_auth(allowed_roles: list[str] | None = None):
 
                 user = user_res.user
                 user_id = user.id
+                user_meta = getattr(user, "user_metadata", None) or {}
 
-                # Fetch profile from profiles table using service client
-                service_client = get_service_client()
-                profile_res = service_client.table("profiles").select("*").eq("id", user_id).maybe_single().execute()
+                # Fetch profile from profiles table using service client if available
+                profile = None
+                try:
+                    service_client = get_service_client()
+                    profile_res = service_client.table("profiles").select("*").eq("id", user_id).maybe_single().execute()
+                    profile = profile_res.data if profile_res else None
+                except Exception as profile_err:
+                    # Fallback to user_metadata if table query fails or permissions are restricted
+                    profile = None
 
-                profile = profile_res.data if profile_res else None
-                user_role = profile.get("role") if profile else user.user_metadata.get("role", "customer")
+                user_role = (profile.get("role") if profile else None) or user_meta.get("role", "customer")
 
                 # Attach to Flask request context
                 g.current_user = {
@@ -92,7 +98,8 @@ def require_auth(allowed_roles: list[str] | None = None):
                 g.current_profile = profile or {
                     "id": user_id,
                     "role": user_role,
-                    "full_name": user.user_metadata.get("full_name", user.email)
+                    "full_name": user_meta.get("full_name") or (user.email.split("@")[0] if user.email else "User"),
+                    "phone": user_meta.get("phone", "")
                 }
 
                 # Role-based access control

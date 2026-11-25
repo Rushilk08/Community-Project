@@ -361,16 +361,23 @@ export function AuthProvider({ children }) {
           extractUserRole(data.user) ||
           'customer';
 
-        // When user explicitly selects Worker or Customer profile, update profiles table to match
-        if (preferredRole && userProfile && userProfile.role !== preferredRole) {
+        // When user explicitly selects Worker or Customer profile, update profiles table and auth metadata to match
+        if (preferredRole && (userProfile?.role !== preferredRole || data.user.user_metadata?.role !== preferredRole)) {
           try {
-            await supabase
-              .from('profiles')
-              .update({ role: preferredRole })
-              .eq('id', data.user.id);
-            userProfile.role = preferredRole;
+            if (userProfile) {
+              await supabase
+                .from('profiles')
+                .update({ role: preferredRole })
+                .eq('id', data.user.id);
+              userProfile.role = preferredRole;
+            }
           } catch (updateErr) {
             console.warn('[AuthContext] Could not update profile role to preferred role:', updateErr.message);
+          }
+          try {
+            await supabase.auth.updateUser({ data: { role: preferredRole } });
+          } catch (metaErr) {
+            console.warn('[AuthContext] Could not update user metadata role:', metaErr.message);
           }
         }
 
