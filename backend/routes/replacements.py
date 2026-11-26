@@ -140,12 +140,22 @@ def get_replacement_candidates():
     job_date = request.args.get("date", "").strip()
     start_time = request.args.get("start_time", "09:00").strip()
     duration = float(request.args.get("duration", 8.0))
+    job_id = request.args.get("job_id", "").strip()
 
     candidates = []
 
     if Config.is_supabase_configured():
         try:
             client = get_service_client()
+
+            active_worker_ids = set()
+            if job_id:
+                try:
+                    active_bookings = client.table("bookings").select("worker_id").eq("job_id", job_id).eq("status", "confirmed").execute()
+                    active_worker_ids = {b["worker_id"] for b in (active_bookings.data or [])}
+                except Exception:
+                    active_worker_ids = set()
+
             query = client.table("profiles").select("id, full_name, phone, skill, location, is_available").eq("role", "worker")
             if skill:
                 query = query.ilike("skill", f"%{skill}%")
@@ -154,6 +164,8 @@ def get_replacement_candidates():
 
             for w in workers:
                 wid = w["id"]
+                if wid in active_worker_ids:
+                    continue  # Worker is already actively confirmed on this job
                 # Conflict detection
                 if job_date:
                     conflict_check = check_worker_conflict(
@@ -432,19 +444,38 @@ def confirm_replacement_selection(replacement_id: str):
                     "error_code": "WORKER_UNAVAILABLE"
                 }), 400
 
-            # Create confirmed booking
+            # Create or reinstate confirmed booking
             wage = float(job.get("wage_per_worker") or job.get("wage") or 800)
-            booking_id = str(uuid.uuid4())
-            booking_data = {
-                "id": booking_id,
-                "job_id": job_id,
-                "worker_id": worker_id,
-                "agreed_wage": wage,
-                "status": "confirmed",
-                "confirmed_at": now_iso,
-                "created_at": now_iso
-            }
-            client.table("bookings").insert(booking_data).execute()
+            existing_booking_res = client.table("bookings").select("id, status").eq("job_id", job_id).eq("worker_id", worker_id).execute()
+            existing_booking = existing_booking_res.data[0] if (existing_booking_res and existing_booking_res.data) else None
+
+            if existing_booking:
+                if existing_booking.get("status") == "confirmed":
+                    return jsonify({
+                        "success": False,
+                        "message": "This worker is already active and confirmed on this job.",
+                        "error_code": "WORKER_ALREADY_CONFIRMED"
+                    }), 400
+                # Re-instate previously cancelled booking
+                booking_id = existing_booking["id"]
+                client.table("bookings").update({
+                    "status": "confirmed",
+                    "agreed_wage": wage,
+                    "confirmed_at": now_iso,
+                    "updated_at": now_iso
+                }).eq("id", booking_id).execute()
+            else:
+                booking_id = str(uuid.uuid4())
+                booking_data = {
+                    "id": booking_id,
+                    "job_id": job_id,
+                    "worker_id": worker_id,
+                    "agreed_wage": wage,
+                    "status": "confirmed",
+                    "confirmed_at": now_iso,
+                    "created_at": now_iso
+                }
+                client.table("bookings").insert(booking_data).execute()
 
             # Update vacancy
             confirmed = int(job.get("confirmed_workers") or 0) + 1

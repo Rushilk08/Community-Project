@@ -193,8 +193,12 @@ export default function PostJob() {
         latitude: formData.latitude,
         longitude: formData.longitude
       });
-      const createdJobId = res?.job?.id || res?.data?.id || 'job-101';
-      navigate(`/customer/live-hiring?jobId=${createdJobId}`);
+      const createdJobId = res?.job?.id || res?.data?.id || res?.id;
+      if (createdJobId) {
+        navigate(`/customer/live-hiring?jobId=${createdJobId}`);
+      } else {
+        navigate('/customer/live-hiring');
+      }
     } catch (err) {
       setError(err.message || 'Failed to post job. Please try again.');
     } finally {

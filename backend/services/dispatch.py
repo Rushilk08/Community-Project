@@ -101,7 +101,8 @@ def dispatch_job_offers(job_id: str) -> List[Dict[str, Any]]:
 
     # 4. Create pending offers for the top candidates
     created_offers = []
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=Config.OFFER_EXPIRY_MINUTES)).isoformat()
+    expiry_mins = max(Config.OFFER_EXPIRY_MINUTES, 30)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=expiry_mins)).isoformat()
 
     for candidate in eligible_workers[:slots_to_dispatch]:
         worker_id = candidate["worker_id"]

@@ -20,6 +20,7 @@ def accept_offer(offer_id: str):
     worker_id = g.current_user["id"]
 
     if not Config.is_supabase_configured():
+        has_pledged = bool((request.get_json(silent=True) or {}).get("has_remaining_workers"))
         return jsonify({
             "success": True,
             "message": "Offer accepted successfully (Demo Mode)",
@@ -31,8 +32,17 @@ def accept_offer(offer_id: str):
                 "location": "Indiranagar, Bengaluru",
                 "customer_name": "Ramesh Patel",
                 "customer_phone": "+91 98860 12345",
-                "status": "confirmed"
-            }
+                "status": "confirmed",
+                "workers_needed": 3,
+                "confirmed_workers": 1,
+                "remaining_vacancies": 2,
+                "can_refer": True,
+                "has_team_pledged": has_pledged,
+                "required_skill": "Mason"
+            },
+            "remaining_vacancies": 2,
+            "can_refer": True,
+            "has_team_pledged": has_pledged
         }), 200
 
     try:
@@ -79,6 +89,10 @@ def accept_offer(offer_id: str):
                     job_id = b.get("job_id")
                     job_res = client.table("jobs").select("*").eq("id", job_id).maybe_single().execute()
                     job = job_res.data if job_res else {}
+                    workers_needed = int(job.get("workers_needed") or job.get("workers_required") or 1)
+                    confirmed_count = int(job.get("confirmed_workers") or 1)
+                    remaining_vacancies = max(0, workers_needed - confirmed_count)
+
                     customer_res = client.table("profiles").select("full_name, phone").eq("id", job.get("customer_id")).maybe_single().execute()
                     cust = customer_res.data if customer_res else {}
                     loc_str = job.get("worksite_address") or job.get("location") or "Bengaluru"
@@ -103,13 +117,20 @@ def accept_offer(offer_id: str):
                         "google_maps_url": maps_url,
                         "customer_name": cust.get("full_name", "Site Employer"),
                         "customer_phone": cust.get("phone", "Site Contact"),
-                        "confirmed_at": b.get("confirmed_at")
+                        "confirmed_at": b.get("confirmed_at"),
+                        "workers_needed": workers_needed,
+                        "confirmed_workers": confirmed_count,
+                        "remaining_vacancies": remaining_vacancies,
+                        "can_refer": remaining_vacancies > 0,
+                        "required_skill": job.get("required_skill") or job.get("skill") or "General Labour"
                     }
                     return jsonify({
                         "success": True,
                         "message": "Offer already accepted. Booking confirmed.",
                         "booking": booking_data,
-                        "data": booking_data
+                        "data": booking_data,
+                        "remaining_vacancies": remaining_vacancies,
+                        "can_refer": remaining_vacancies > 0
                     }), 200
 
             return jsonify({
@@ -125,6 +146,10 @@ def accept_offer(offer_id: str):
         job_res = client.table("jobs").select("*").eq("id", job_id).maybe_single().execute()
         job = job_res.data if job_res else {}
 
+        workers_needed = int(job.get("workers_needed") or job.get("workers_required") or 1)
+        confirmed_count = int(job.get("confirmed_workers") or 1)
+        remaining_vacancies = max(0, workers_needed - confirmed_count)
+
         customer_res = client.table("profiles").select("full_name, phone").eq("id", job.get("customer_id")).maybe_single().execute()
         cust = customer_res.data if customer_res else {}
 
@@ -136,6 +161,94 @@ def accept_offer(offer_id: str):
             maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
         else:
             maps_url = f"https://www.google.com/maps/search/?api=1&query={loc_str.replace(' ', '+')}"
+
+        # Handle optional coworker referrals submitted alongside acceptance or 'I have remaining person' checkbox
+        payload = request.get_json(silent=True) or {}
+        has_remaining_workers = bool(payload.get("has_remaining_workers") or payload.get("bring_remaining_workers"))
+        incoming_referrals = payload.get("referrals", [])
+        created_referrals = []
+
+        if has_remaining_workers and remaining_vacancies > 0:
+            worker_name = g.current_profile.get("full_name", "Worker")
+            worker_phone = g.current_profile.get("phone", "")
+            now_iso = datetime.now(timezone.utc).isoformat()
+            skill_name = job.get("required_skill") or job.get("skill") or "General Labour"
+            for i in range(remaining_vacancies):
+                ref_id = str(uuid.uuid4())
+                cand_name = f"{worker_name}'s Coworker #{i + 1}"
+                cand_phone = f"{worker_phone} (Crew #{i + 1})" if worker_phone else f"+91-TEAM-{i + 1}"
+                cand_notes = f"Worker marked: 'I have remaining person is there for this work' (will bring coworker to site)"
+                try:
+                    ref_insert = client.table("worker_referrals").insert({
+                        "id": ref_id,
+                        "job_id": job_id,
+                        "referring_worker_id": worker_id,
+                        "candidate_name": cand_name,
+                        "candidate_phone": cand_phone,
+                        "candidate_skills": skill_name,
+                        "experience": "Attending with primary worker",
+                        "location": loc_str,
+                        "notes": cand_notes,
+                        "consent_confirmed": True,
+                        "status": "pending",
+                        "created_at": now_iso,
+                        "updated_at": now_iso
+                    }).execute()
+                    if ref_insert and ref_insert.data:
+                        created_referrals.append(ref_insert.data[0])
+                except Exception as ref_err:
+                    print(f"[Team Referral Insert Warning] {ref_err}")
+
+            customer_id = job.get("customer_id")
+            if customer_id:
+                create_notification(
+                    user_id=customer_id,
+                    title="👥 Full Team Confirmed by Worker!",
+                    message=f"{worker_name} accepted '{job.get('title')}' and confirmed they have the remaining {remaining_vacancies} worker(s) and will bring them to your site.",
+                    notif_type="referral",
+                    data={"job_id": job_id, "has_team_pledged": True, "team_count": remaining_vacancies}
+                )
+        elif isinstance(incoming_referrals, list) and incoming_referrals and remaining_vacancies > 0:
+            for item in incoming_referrals[:remaining_vacancies]:
+                cand_name = str(item.get("candidate_name") or "").strip()
+                cand_phone = str(item.get("candidate_phone") or "").strip()
+                cand_skill = str(item.get("candidate_skills") or job.get("required_skill") or job.get("skill") or "General Labour").strip()
+                cand_exp = str(item.get("experience") or "").strip()
+                cand_notes = str(item.get("notes") or f"Referred by {g.current_profile.get('full_name', 'worker')} during job acceptance").strip()
+
+                if len(cand_name) >= 2 and len(cand_phone) >= 8:
+                    ref_id = str(uuid.uuid4())
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    try:
+                        ref_insert = client.table("worker_referrals").insert({
+                            "id": ref_id,
+                            "job_id": job_id,
+                            "referring_worker_id": worker_id,
+                            "candidate_name": cand_name,
+                            "candidate_phone": cand_phone,
+                            "candidate_skills": cand_skill,
+                            "experience": cand_exp,
+                            "location": loc_str,
+                            "notes": cand_notes,
+                            "consent_confirmed": True,
+                            "status": "pending",
+                            "created_at": now_iso,
+                            "updated_at": now_iso
+                        }).execute()
+                        if ref_insert and ref_insert.data:
+                            created_referrals.append(ref_insert.data[0])
+                            # Notify customer immediately
+                            customer_id = job.get("customer_id")
+                            if customer_id:
+                                create_notification(
+                                    user_id=customer_id,
+                                    title="🤝 Coworker Referral on Your Job!",
+                                    message=f"{g.current_profile.get('full_name', 'Worker')} accepted '{job.get('title')}' and recommended {cand_name} ({cand_phone}) for one of the remaining vacancies.",
+                                    notif_type="referral",
+                                    data={"job_id": job_id, "referral_id": ref_id}
+                                )
+                    except Exception as ref_err:
+                        print(f"[Referral On Accept Warning] {ref_err}")
 
         booking_data = {
             "id": booking_id,
@@ -151,14 +264,24 @@ def accept_offer(offer_id: str):
             "google_maps_url": maps_url,
             "customer_name": cust.get("full_name", "Site Employer"),
             "customer_phone": cust.get("phone", "Site Contact"),
-            "confirmed_at": datetime.now(timezone.utc).isoformat()
+            "confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "workers_needed": workers_needed,
+            "confirmed_workers": confirmed_count,
+            "remaining_vacancies": remaining_vacancies,
+            "can_refer": remaining_vacancies > 0,
+            "has_team_pledged": has_remaining_workers,
+            "required_skill": job.get("required_skill") or job.get("skill") or "General Labour",
+            "created_referrals": created_referrals
         }
 
         return jsonify({
             "success": True,
             "message": "Offer accepted and booking confirmed successfully.",
             "booking": booking_data,
-            "data": booking_data
+            "data": booking_data,
+            "remaining_vacancies": remaining_vacancies,
+            "can_refer": remaining_vacancies > 0,
+            "has_team_pledged": has_remaining_workers
         }), 200
 
     except Exception as e:

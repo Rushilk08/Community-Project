@@ -153,13 +153,23 @@ def _generate_content(
             "Gemini is not configured. Add GEMINI_API_KEY to backend/.env and restart the API."
         )
 
-    configured_model = (Config.GEMINI_MODEL or "gemini-2.5-flash").strip().removeprefix("models/")
-    fallback_models = [configured_model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+    configured_model = (Config.GEMINI_MODEL or "gemini-3-flash-preview").strip().removeprefix("models/")
+    fallback_models = [
+        configured_model,
+        "gemini-3-flash-preview",
+        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-pro"
+    ]
     models_to_try = list(dict.fromkeys(m for m in fallback_models if m))
 
     is_vertex_express = api_key.startswith("AQ.")
+    # Try GEMINI_API_URL first as primary Google AI Studio endpoint; fallback to Vertex if applicable
     endpoints = (
-        [VERTEX_EXPRESS_API_URL, GEMINI_API_URL]
+        [GEMINI_API_URL, VERTEX_EXPRESS_API_URL]
         if is_vertex_express
         else [GEMINI_API_URL]
     )
@@ -171,6 +181,7 @@ def _generate_content(
     }
 
     response = None
+    last_request_error = None
     for endpoint_tpl in endpoints:
         for model_name in models_to_try:
             url = endpoint_tpl.format(model=model_name)
@@ -180,6 +191,7 @@ def _generate_content(
                 params = {"key": api_key}
             else:
                 headers["x-goog-api-key"] = api_key
+                params = {"key": api_key}
 
             try:
                 response = requests.post(
@@ -190,12 +202,25 @@ def _generate_content(
                     timeout=(3, 25)
                 )
             except requests.RequestException as error:
-                raise AIServiceError("Could not reach the Gemini AI service. Please try again.") from error
+                last_request_error = error
+                continue
 
-            if response.status_code != 404:
+            if response.ok:
                 break
-        if response is not None and response.status_code != 404:
+            # If 404 (model not found/deprecated) or 503 (model overloaded), try next model
+            if response.status_code in (404, 503, 429):
+                continue
+            # If vertex endpoint is forbidden, break to next endpoint
+            if endpoint_tpl == VERTEX_EXPRESS_API_URL and response.status_code in (401, 403):
+                break
+
+        if response is not None and response.ok:
             break
+
+    if response is None:
+        if last_request_error:
+            raise AIServiceError("Could not reach the Gemini AI service. Please try again.") from last_request_error
+        raise AIServiceError("Could not reach the Gemini AI service. Please try again.")
 
     if response.status_code in (401, 403):
         raise AIConfigurationError("Gemini rejected the server API key. Check GEMINI_API_KEY.")
@@ -294,14 +319,19 @@ def answer_website_question(question: str) -> tuple[str, list[dict[str, str]]]:
         ASSISTANT_SYSTEM_INSTRUCTION,
         {
             "temperature": 0.1,
-            "maxOutputTokens": 350,
+            "maxOutputTokens": 800,
             "responseMimeType": "application/json",
             "responseSchema": response_schema
         }
     )
 
+    cleaned_json = response_text.strip()
+    if cleaned_json.startswith("```"):
+        cleaned_json = re.sub(r"^```(?:json)?\n?", "", cleaned_json)
+        cleaned_json = re.sub(r"\n?```$", "", cleaned_json).strip()
+
     try:
-        result = json.loads(response_text)
+        result = json.loads(cleaned_json)
     except ValueError as error:
         raise AIServiceError("The WorkLink assistant returned an unreadable answer.") from error
 

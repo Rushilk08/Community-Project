@@ -239,3 +239,27 @@ def test_notification_center(client):
     data = res.get_json()
     assert "notifications" in data
     assert "unread_count" in data
+
+
+def test_pledge_worker_team_and_accept_with_remaining_workers(client):
+    # 1. Test accepting offer with has_remaining_workers checkbox marked
+    accept_res = client.post(
+        "/api/workers/offers/offer-501/accept",
+        json={"has_remaining_workers": True},
+        headers={"X-Test-Auth": "1", "X-Test-Role": "worker", "X-Test-User-Id": "worker-1"}
+    )
+    assert accept_res.status_code == 200
+    accept_data = accept_res.get_json()
+    assert accept_data["success"] is True
+    assert accept_data.get("has_team_pledged") is True
+
+    # 2. Test pledge-team route directly
+    pledge_res = client.post(
+        "/api/referrals/pledge-team",
+        json={"job_id": "job-101", "notes": "I have remaining person for this work"},
+        headers={"X-Test-Auth": "1", "X-Test-Role": "worker", "X-Test-User-Id": "worker-1"}
+    )
+    assert pledge_res.status_code == 200
+    pledge_data = pledge_res.get_json()
+    assert pledge_data["success"] is True
+    assert pledge_data["remaining_count"] >= 1

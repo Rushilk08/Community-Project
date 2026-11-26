@@ -209,6 +209,25 @@ function handleMockFallback(endpoint, method, data) {
     };
   }
 
+  // 3b. Cancel Job
+  if (endpoint.match(/\/jobs\/[^/]+\/cancel/) && (method === 'POST' || method === 'PATCH')) {
+    const parts = endpoint.split('/');
+    const jobId = parts[2];
+    const job = mockDb.jobs.find(j => j.id === jobId);
+    if (job) job.status = 'cancelled';
+    return { success: true, message: 'Job cancelled successfully', status: 'cancelled' };
+  }
+
+  // 3c. Get Job Worker Requests
+  if (endpoint.match(/\/jobs\/[^/]+\/worker-requests/) && method === 'GET') {
+    return { success: true, requests: [] };
+  }
+
+  // 3d. Cancel Leave
+  if (endpoint.match(/\/leaves\/[^/]+\/cancel/) && (method === 'PATCH' || method === 'POST')) {
+    return { success: true, message: 'Leave cancelled successfully', status: 'cancelled' };
+  }
+
   // 4. Update Worker Availability
   if (endpoint === '/workers/availability' && (method === 'PATCH' || method === 'POST')) {
     mockDb.availability = data?.is_available ?? true;
@@ -417,11 +436,22 @@ export async function getWorkerOffers({ signal } = {}) {
 }
 
 /**
- * Worker accepts a pending job offer
+ * Worker accepts a pending job offer (with optional team pledge or coworker referrals)
  */
-export async function acceptOffer(offerId) {
+export async function acceptOffer(offerId, data = null) {
   return request(`/workers/offers/${offerId}/accept`, {
-    method: 'POST'
+    method: 'POST',
+    data: data || undefined
+  });
+}
+
+/**
+ * Worker marks 'I have remaining person is there for this work'
+ */
+export async function pledgeWorkerTeam({ job_id, notes = '', remaining_count = null }) {
+  return request('/referrals/pledge-team', {
+    method: 'POST',
+    data: { job_id, notes, remaining_count }
   });
 }
 
@@ -602,13 +632,15 @@ export async function createReplacementRequest(replacementData) {
   });
 }
 
-export async function getReplacementCandidates({ skill = '', date = '', startTime = '09:00', duration = 8 } = {}) {
-  const q = new URLSearchParams({
+export async function getReplacementCandidates({ skill = '', date = '', startTime = '09:00', duration = 8, job_id = '' } = {}) {
+  const params = {
     skill,
     date,
     start_time: startTime,
     duration: String(duration)
-  }).toString();
+  };
+  if (job_id) params.job_id = job_id;
+  const q = new URLSearchParams(params).toString();
   return request(`/replacements/candidates?${q}`, { method: 'GET' });
 }
 
@@ -676,6 +708,7 @@ export default {
   createWorkerGroup,
   getAvailableJobsForReferral,
   submitWorkerReferral,
+  pledgeWorkerTeam,
   getMyReferrals,
   getCustomerReferrals,
   resolveReferral,

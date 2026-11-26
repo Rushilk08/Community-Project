@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { applyForLeave, getMyLeaves, cancelMyLeave, getWorkerBookings } from '../../services/api';
 
 export default function WorkerLeaveSection() {
+  const { t, i18n } = useTranslation();
   const [bookings, setBookings] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,24 @@ export default function WorkerLeaveSection() {
   const [customReason, setCustomReason] = useState('');
   const [description, setDescription] = useState('');
   const [isEmergency, setIsEmergency] = useState(false);
+
+  const formatDateTime = (isoStr) => {
+    if (!isoStr) return '';
+    try {
+      const currentLang = i18n.language ? i18n.language.split('-')[0] : 'en';
+      const locale = currentLang === 'kn' ? 'kn-IN' : currentLang === 'hi' ? 'hi-IN' : 'en-IN';
+      return new Date(isoStr).toLocaleString(locale, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return isoStr;
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -50,11 +70,11 @@ export default function WorkerLeaveSection() {
     setSuccessMsg('');
 
     if (!selectedBookingId) {
-      setError('Please select the active job for which you need leave.');
+      setError(t('selectActiveJob', 'Please select the active job for which you need leave.'));
       return;
     }
     if (!startDate) {
-      setError('Start date is required.');
+      setError(t('startDate', 'Start date is required.'));
       return;
     }
 
@@ -62,7 +82,7 @@ export default function WorkerLeaveSection() {
     const effectiveReason = reason === 'Other' ? customReason.trim() : reason;
 
     if (!effectiveReason) {
-      setError('Please provide a reason for the leave.');
+      setError(t('reasonForLeave', 'Please provide a reason for the leave.'));
       return;
     }
 
@@ -77,7 +97,7 @@ export default function WorkerLeaveSection() {
         description: description.trim(),
         is_emergency: isEmergency
       });
-      setSuccessMsg('Leave request submitted successfully! Your employer has been notified.');
+      setSuccessMsg(t('requestSent', 'Leave application submitted successfully! Your employer has been notified.'));
       setStartDate('');
       setEndDate('');
       setDescription('');
@@ -90,26 +110,61 @@ export default function WorkerLeaveSection() {
     }
   };
 
-  const handleCancel = async (leaveId) => {
-    if (!window.confirm('Cancel this pending leave request?')) return;
+  const handleCancel = async (leaveId, isApproved = false) => {
+    const confirmPrompt = isApproved
+      ? t('confirmCancelApprovedLeave', 'Are you sure you want to cancel this approved leave and return to active work?')
+      : t('confirmCancelPendingLeave', 'Cancel this pending leave request?');
+    if (!window.confirm(confirmPrompt)) return;
     try {
       await cancelMyLeave(leaveId);
+      setSuccessMsg(t('leaveCancelledSuccess', 'Leave cancelled successfully. You are now available for work.'));
       loadData();
     } catch (err) {
       alert(err.message || 'Failed to cancel leave.');
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, reviewedAt, createdAt) => {
     switch (status?.toLowerCase()) {
       case 'approved':
-        return <span className="badge badge-success">✓ Approved</span>;
+        return (
+          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <span className="badge badge-success">✓ {t('leaveApprovedBadge', 'Approved')}</span>
+            {reviewedAt && (
+              <small style={{ color: '#15803d', fontSize: '0.725rem', fontWeight: 600 }}>
+                {t('leaveApprovedAt', 'Customer gave leave on')} {formatDateTime(reviewedAt)}
+              </small>
+            )}
+          </div>
+        );
       case 'rejected':
-        return <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>✕ Declined</span>;
+        return (
+          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
+              ✕ {t('leaveDeclinedBadge', 'Declined')}
+            </span>
+            {reviewedAt && (
+              <small style={{ color: '#b91c1c', fontSize: '0.725rem', fontWeight: 600 }}>
+                {t('leaveDeniedAt', 'Leave denied on')} {formatDateTime(reviewedAt)}
+              </small>
+            )}
+          </div>
+        );
       case 'cancelled':
-        return <span className="badge badge-neutral">Cancelled</span>;
+        return <span className="badge badge-neutral">{t('cancelled', 'Cancelled')}</span>;
       default:
-        return <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>⏳ Pending Decision</span>;
+        return (
+          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+              ⏳ {t('leavePendingBadge', 'Pending Decision')}
+            </span>
+            {createdAt && (
+              <small style={{ color: '#92400e', fontSize: '0.725rem' }}>
+                {t('requestedOn', 'Requested on')} {formatDateTime(createdAt)}
+              </small>
+            )}
+          </div>
+        );
     }
   };
 
@@ -119,10 +174,10 @@ export default function WorkerLeaveSection() {
       <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem' }}>
         <div style={{ marginBottom: '1.25rem' }}>
           <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.15rem', color: '#0f172a' }}>
-            🏖️ Worker Leave Application
+            🏖️ {t('workerLeaveTitle', 'Worker Leave Application')}
           </h3>
           <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-            Need time off for personal reasons or emergencies? Submit your leave request transparently to your employer.
+            {t('workerLeaveSubtitle', 'Need time off for personal reasons or emergencies? Submit your leave request transparently to your employer.')}
           </p>
         </div>
 
@@ -147,7 +202,7 @@ export default function WorkerLeaveSection() {
           <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                Select Active Job Assignment *
+                {t('selectActiveJob', 'Select Active Job Assignment *')}
               </label>
               <select
                 value={selectedBookingId}
@@ -166,7 +221,7 @@ export default function WorkerLeaveSection() {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                Start Date *
+                {t('startDate', 'Start Date *')}
               </label>
               <input
                 type="date"
@@ -179,7 +234,7 @@ export default function WorkerLeaveSection() {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                End Date (Optional for multi-day leave)
+                {t('endDateOptional', 'End Date (Optional for multi-day leave)')}
               </label>
               <input
                 type="date"
@@ -193,7 +248,7 @@ export default function WorkerLeaveSection() {
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                Reason for Leave *
+                {t('reasonForLeave', 'Reason for Leave *')}
               </label>
               <select
                 value={reason}
@@ -224,14 +279,14 @@ export default function WorkerLeaveSection() {
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                Additional Details (Optional)
+                {t('explanationOptional', 'Additional Details (Optional)')}
               </label>
               <textarea
                 className="form-input"
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Explain briefly to help your employer plan arrangements..."
+                placeholder={t('leaveDescPlaceholder', 'Explain briefly to help your employer plan arrangements...')}
               />
             </div>
 
@@ -242,7 +297,7 @@ export default function WorkerLeaveSection() {
                   checked={isEmergency}
                   onChange={(e) => setIsEmergency(e.target.checked)}
                 />
-                <span>🚨 This is an urgent / emergency leave request (alert employer immediately)</span>
+                <span>{t('emergencyLeaveCheckbox', '🚨 This is an urgent / emergency leave request (alert employer immediately)')}</span>
               </label>
             </div>
 
@@ -253,7 +308,7 @@ export default function WorkerLeaveSection() {
                 className="btn btn-primary"
                 style={{ padding: '0.65rem 1.5rem' }}
               >
-                {submitting ? 'Submitting Leave Request…' : 'Submit Leave Request ➔'}
+                {submitting ? t('submittingLeave', 'Submitting Leave Request…') : `${t('applyLeaveBtn', 'Submit Leave Request')} ➔`}
               </button>
             </div>
           </form>
@@ -263,15 +318,15 @@ export default function WorkerLeaveSection() {
       {/* Leave Applications History */}
       <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem' }}>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.15rem', color: '#0f172a' }}>
-          📅 My Leave Applications ({leaves.length})
+          📅 {t('myLeaveApplications', 'My Leave Applications')} ({leaves.length})
         </h3>
 
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Loading leave history…</p>
+          <p style={{ color: '#94a3b8' }}>{t('loading', 'Loading leave history…')}</p>
         ) : leaves.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
             <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
-              You haven't requested any leave yet.
+              {t('noLeaves', "You haven't requested any leave yet.")}
             </p>
           </div>
         ) : (
@@ -301,10 +356,10 @@ export default function WorkerLeaveSection() {
                         EMERGENCY
                       </span>
                     )}
-                    {getStatusBadge(l.status)}
+                    {getStatusBadge(l.status, l.reviewed_at, l.created_at)}
                   </div>
                   <p style={{ margin: '0.25rem 0 0', fontSize: '0.825rem', color: '#475569' }}>
-                    Dates: <strong>{l.start_date === l.end_date ? l.start_date : `${l.start_date} to ${l.end_date}`}</strong> · Reason: {l.reason}
+                    Dates: <strong>{l.start_date === l.end_date ? l.start_date : `${l.start_date} to ${l.end_date}`}</strong> · {t('reasonForLeave', 'Reason')}: {l.reason}
                   </p>
                   {l.review_notes && (
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.775rem', color: '#0369a1', fontStyle: 'italic' }}>
@@ -316,11 +371,28 @@ export default function WorkerLeaveSection() {
                 {l.status === 'pending' && (
                   <button
                     type="button"
-                    onClick={() => handleCancel(l.id)}
+                    onClick={() => handleCancel(l.id, false)}
                     className="btn btn-outline btn-sm"
                     style={{ fontSize: '0.75rem', color: '#dc2626', borderColor: '#fca5a5' }}
                   >
-                    Cancel Request
+                    {t('cancelRequest', 'Cancel Request')}
+                  </button>
+                )}
+
+                {l.status === 'approved' && (
+                  <button
+                    type="button"
+                    onClick={() => handleCancel(l.id, true)}
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#dc2626',
+                      borderColor: '#fca5a5',
+                      fontWeight: 600,
+                      backgroundColor: '#ffffff'
+                    }}
+                  >
+                    {t('cancelApprovedLeave', 'Cancel Leave & Return to Work')}
                   </button>
                 )}
               </div>

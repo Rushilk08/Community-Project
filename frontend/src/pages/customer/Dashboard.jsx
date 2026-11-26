@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { getMyJobs } from '../../services/api';
@@ -23,8 +23,24 @@ function isActiveJob(job) {
 export default function CustomerDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [replacementParams, setReplacementParams] = useState(null);
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'overview');
+  const [replacementParams, setReplacementParams] = useState(
+    location.state?.jobId ? { job_id: location.state.jobId, skill: location.state.skill, title: location.state.title } : null
+  );
+
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+      if (location.state.jobId) {
+        setReplacementParams({
+          job_id: location.state.jobId,
+          skill: location.state.skill,
+          title: location.state.title
+        });
+      }
+    }
+  }, [location.state]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -62,12 +78,12 @@ export default function CustomerDashboard() {
   };
 
   const tabs = [
-    { id: 'overview', label: 'Posted Jobs & Overview', icon: 'overview' },
-    { id: 'recommended', label: 'Recommended Candidates', icon: 'users' },
-    { id: 'leaves', label: 'Leave Requests', icon: 'calendar' },
-    { id: 'cancellations', label: 'Cancellation Requests', icon: 'alert' },
-    { id: 'replacement', label: 'Emergency Replacement', icon: 'siren' },
-    { id: 'reviews', label: 'Rate & Review Workers', icon: 'star' }
+    { id: 'overview', label: t('tabPostedJobsOverview', 'Posted Jobs & Overview'), icon: 'overview' },
+    { id: 'recommended', label: t('tabRecommendedCandidates', 'Recommended Candidates'), icon: 'users' },
+    { id: 'leaves', label: t('tabLeaveRequests', 'Leave Requests'), icon: 'calendar' },
+    { id: 'cancellations', label: t('tabCancellationRequests', 'Cancellation Requests'), icon: 'alert' },
+    { id: 'replacement', label: t('tabEmergencyReplacement', 'Emergency Replacement'), icon: 'siren' },
+    { id: 'reviews', label: t('tabRateReviewWorkers', 'Rate & Review Workers'), icon: 'star' }
   ];
 
   return (
@@ -78,9 +94,9 @@ export default function CustomerDashboard() {
           <span className="dashboard-hero-light-sweep" />
         </div>
         <div className="dashboard-hero-copy">
-          <span className="dashboard-eyebrow">CUSTOMER WORKSPACE</span>
+          <span className="dashboard-eyebrow">{t('customerWorkspace', 'CUSTOMER WORKSPACE')}</span>
           <h1>{t('welcome')}, {customerName}</h1>
-          <p>Hire verified workers, review recommendations, manage leaves and emergency replacements seamlessly.</p>
+          <p>{t('customerHeroSubtitle', 'Hire verified workers, review recommendations, manage leaves and emergency replacements seamlessly.')}</p>
           <div className="dashboard-hero-actions">
             <Link to="/customer/post-job" className="dashboard-hero-cta">
               <span aria-hidden="true">＋</span> {t('postJob')}
@@ -90,10 +106,10 @@ export default function CustomerDashboard() {
               className="btn btn-outline"
               style={{ backgroundColor: 'rgba(255,255,255,0.9)', color: '#0f172a', fontWeight: 600, borderRadius: '999px', padding: '0.65rem 1.25rem' }}
             >
-              🚨 Find Replacement
+              {t('findReplacement', '🚨 Find Replacement')}
             </button>
             <Link to="/customer/my-jobs" className="dashboard-hero-secondary">
-              View your jobs <span aria-hidden="true">→</span>
+              {t('viewYourJobs', 'View your jobs')} <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
@@ -194,6 +210,24 @@ export default function CustomerDashboard() {
                         {getJobStatus(job)}
                       </span>
                       <small>{Number(job.confirmed_workers) || 0}/{Number(job.workers_required || job.workers_needed) || 0} workers</small>
+                      {(job.has_team_pledged || (job.coworkers_brought_count && job.coworkers_brought_count > 0)) && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            backgroundColor: '#dcfce7',
+                            color: '#15803d',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            marginTop: '0.2rem'
+                          }}
+                        >
+                          👥 +{job.coworkers_brought_count} Coworkers Attending
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <button

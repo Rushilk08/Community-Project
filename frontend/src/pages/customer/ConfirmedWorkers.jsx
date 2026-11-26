@@ -179,6 +179,53 @@ export default function ConfirmedWorkers() {
                   </div>
                 </div>
 
+                {/* Team Coworkers Banner - Worker Bringing Coworkers */}
+                {worker.bringing_coworkers && (
+                  <div
+                    style={{
+                      marginTop: '1rem',
+                      padding: '0.85rem 1rem',
+                      backgroundColor: '#f0fdf4',
+                      border: '1.5px solid #22c55e',
+                      borderRadius: '10px',
+                      boxShadow: '0 2px 6px rgba(34, 197, 94, 0.12)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '1.25rem' }}>👥</span>
+                      <strong style={{ fontSize: '0.95rem', color: '#14532d' }}>
+                        {worker.name} is Bringing {worker.coworkers_count} Coworker{worker.coworkers_count > 1 ? 's' : ''} to this Job
+                      </strong>
+                      <span className="badge" style={{ backgroundColor: '#22c55e', color: '#ffffff', fontSize: '0.7rem' }}>
+                        CREW CONFIRMED
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.84rem', color: '#15803d', lineHeight: 1.45 }}>
+                      This worker marked: <em>"I have the remaining person is there for this work"</em>. They will arrive at your worksite with their {worker.coworkers_count} teammate{worker.coworkers_count > 1 ? 's' : ''} to complete your required team.
+                    </p>
+                    {worker.coworkers && worker.coworkers.length > 0 && (
+                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {worker.coworkers.map((c, ci) => (
+                          <span
+                            key={c.id || ci}
+                            style={{
+                              backgroundColor: '#ffffff',
+                              border: '1px solid #86efac',
+                              color: '#166534',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '6px'
+                            }}
+                          >
+                            👤 {c.candidate_name || `Coworker #${ci + 1}`} ({c.candidate_skills || 'General Labour'})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Worker Metrics Breakdown */}
                 <div
                   style={{

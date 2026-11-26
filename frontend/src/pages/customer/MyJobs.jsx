@@ -104,8 +104,45 @@ export default function MyJobs() {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', fontSize: '0.85rem', color: '#334155', marginTop: '0.5rem' }}>
                         <span>📍 {job.location || job.worksite_address}</span>
                         <span>💰 ₹{job.wage || job.wage_per_worker}/day</span>
-                        <span>👥 {job.confirmed_workers}/{job.workers_required || job.workers_needed} {t('confirmedWorkers')}</span>
+                        <span>
+                          👥 {job.confirmed_workers}/{job.workers_required || job.workers_needed} {t('confirmedWorkers')}
+                          {(job.has_team_pledged || (job.coworkers_brought_count && job.coworkers_brought_count > 0)) && (
+                            <strong style={{ color: '#16a34a', marginLeft: '0.4rem' }}>
+                              (+{job.coworkers_brought_count} coworkers attending)
+                            </strong>
+                          )}
+                        </span>
                       </div>
+
+                      {/* Prominent banner showing worker is bringing coworkers */}
+                      {(job.has_team_pledged || (job.coworkers_brought_count && job.coworkers_brought_count > 0)) && (
+                        <div
+                          style={{
+                            marginTop: '0.75rem',
+                            padding: '0.65rem 0.85rem',
+                            backgroundColor: '#f0fdf4',
+                            border: '1.5px solid #22c55e',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.65rem',
+                            boxShadow: '0 2px 6px rgba(34, 197, 94, 0.1)'
+                          }}
+                        >
+                          <span style={{ fontSize: '1.25rem' }}>👥</span>
+                          <div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              <span style={{ backgroundColor: '#22c55e', color: '#ffffff', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                                TEAM READY
+                              </span>
+                              <span>{job.bringing_worker_name || 'Assigned Worker'} is Bringing {job.coworkers_brought_count} Coworker{job.coworkers_brought_count > 1 ? 's' : ''}!</span>
+                            </div>
+                            <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#15803d' }}>
+                              The worker confirmed: <em>"I have the remaining person is there for this work"</em> and will bring their crew to fulfill your required team.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>

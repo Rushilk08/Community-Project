@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g
 from services.auth import require_auth
+from services.validation import is_valid_uuid
 from services.notifications import create_notification
 from database.supabase_client import get_service_client
 from config import Config
@@ -321,13 +322,23 @@ def decide_leave_request(leave_id: str):
     return jsonify({"success": False, "message": "Leave request not found", "error_code": "NOT_FOUND"}), 404
 
 
-@leaves_bp.route("/leaves/<leave_id>/cancel", methods=["PATCH"])
+@leaves_bp.route("/leaves/<leave_id>/cancel", methods=["PATCH", "POST"])
 @require_auth(allowed_roles=["worker"])
 def cancel_own_leave(leave_id: str):
     """
-    Worker cancels their own pending leave request before decision.
+    Worker cancels their own pending or approved leave request.
+    Restores worker availability if approved leave is cancelled.
     """
     worker_id = g.current_user["id"]
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if not is_valid_uuid(leave_id):
+        for l in _demo_leaves_store:
+            if l.get("id") == leave_id and l.get("worker_id") == worker_id:
+                l["status"] = "cancelled"
+                return jsonify({"success": True, "message": "Leave request cancelled.", "status": "cancelled"}), 200
+        return jsonify({"success": True, "message": "Demo leave cancelled.", "status": "cancelled"}), 200
+
     if Config.is_supabase_configured():
         try:
             client = get_service_client()
@@ -337,21 +348,38 @@ def cancel_own_leave(leave_id: str):
             leave = res.data
             if leave.get("worker_id") != worker_id:
                 return jsonify({"success": False, "message": "Unauthorized", "error_code": "FORBIDDEN"}), 403
-            if leave.get("status") != "pending":
-                return jsonify({"success": False, "message": "Can only cancel pending leave requests", "error_code": "INVALID_STATE"}), 400
+            if leave.get("status") not in ("pending", "approved"):
+                return jsonify({"success": False, "message": "Can only cancel pending or approved leave requests", "error_code": "INVALID_STATE"}), 400
 
             client.table("leave_applications").update({
                 "status": "cancelled",
-                "updated_at": datetime.now(timezone.utc).isoformat()
+                "updated_at": now_iso
             }).eq("id", leave_id).execute()
 
-            return jsonify({"success": True, "message": "Leave request cancelled."}), 200
+            # If worker was on approved leave, restore their online availability
+            try:
+                client.table("worker_profiles").update({
+                    "is_available": True,
+                    "updated_at": now_iso
+                }).eq("user_id", worker_id).execute()
+                client.table("profiles").update({
+                    "is_available": True,
+                    "updated_at": now_iso
+                }).eq("id", worker_id).execute()
+            except Exception as avail_err:
+                print(f"[cancel_own_leave availability update warning] {avail_err}")
+
+            return jsonify({
+                "success": True,
+                "message": "Leave request cancelled. You are now available for work.",
+                "status": "cancelled"
+            }), 200
         except Exception as e:
             return jsonify({"success": False, "message": str(e), "error_code": "DATABASE_ERROR"}), 500
 
     for l in _demo_leaves_store:
         if l.get("id") == leave_id and l.get("worker_id") == worker_id:
             l["status"] = "cancelled"
-            return jsonify({"success": True, "message": "Leave request cancelled."}), 200
+            return jsonify({"success": True, "message": "Leave request cancelled.", "status": "cancelled"}), 200
 
     return jsonify({"success": False, "message": "Leave request not found", "error_code": "NOT_FOUND"}), 404

@@ -1,5 +1,18 @@
 import re
+import uuid
 from typing import Tuple, Dict, Any
+
+def is_valid_uuid(val: Any) -> bool:
+    """
+    Check if a string is a valid UUID to avoid PostgreSQL 22P02 syntax errors.
+    """
+    if not val:
+        return False
+    try:
+        uuid.UUID(str(val))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 # Prohibited keywords under legal and anti-exploitation safeguards:
 # Prohibits bonded labour, hazardous child labour, human trafficking, illegal servitude, or illicit activities.

@@ -6,6 +6,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from config import Config
 from database.supabase_client import get_service_client
 from services.auth import require_auth
+from services.validation import is_valid_uuid
 
 worker_requests_bp = Blueprint("worker_requests", __name__)
 
@@ -220,13 +221,23 @@ def get_booking_requests(booking_id: str):
         )
         records = result.data if result and result.data else []
         return jsonify({"success": True, "requests": records}), 200
-    except Exception:
+    except Exception as e:
+        err_str = str(e)
+        if "PGRST205" in err_str or "schema cache" in err_str or "42501" in err_str:
+            return jsonify({"success": True, "requests": []}), 200
         return _database_error("Could not load requests for this booking.")
 
 
 @worker_requests_bp.route("/jobs/<job_id>/worker-requests", methods=["GET"])
 @require_auth(allowed_roles=["customer"])
 def get_job_worker_requests(job_id: str):
+    if not is_valid_uuid(job_id):
+        return jsonify({
+            "success": True,
+            "requests": [],
+            "data": []
+        }), 200
+
     if not Config.is_supabase_configured():
         return _database_unavailable()
 
@@ -281,7 +292,10 @@ def get_job_worker_requests(job_id: str):
         for record in records:
             record["worker_name"] = names.get(record.get("worker_id"), "Worker")
         return jsonify({"success": True, "requests": records}), 200
-    except Exception:
+    except Exception as e:
+        err_str = str(e)
+        if "PGRST205" in err_str or "schema cache" in err_str or "42501" in err_str:
+            return jsonify({"success": True, "requests": []}), 200
         return _database_error("Could not load worker requests for this job.")
 
 

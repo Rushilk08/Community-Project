@@ -23,7 +23,24 @@ export default function NotificationCenter() {
   useEffect(() => {
     fetchNotifs();
     const interval = setInterval(fetchNotifs, 12000);
-    return () => clearInterval(interval);
+
+    const handleNotifRead = (e) => {
+      const readId = e.detail?.id;
+      if (readId) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === readId ? { ...n, is_read: true } : n))
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } else {
+        fetchNotifs();
+      }
+    };
+    window.addEventListener('worklink:notification-read', handleNotifRead);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('worklink:notification-read', handleNotifRead);
+    };
   }, []);
 
   useEffect(() => {

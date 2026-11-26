@@ -86,6 +86,7 @@ export default function CustomerEmergencyReplacementSection({ initialParams = nu
 
       // 2. Fetch eligible, conflict-free candidates
       const candRes = await getReplacementCandidates({
+        job_id: selectedJobId,
         skill: requiredSkill,
         date: replacementDate,
         startTime: startTime,

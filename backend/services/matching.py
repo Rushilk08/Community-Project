@@ -80,6 +80,7 @@ def find_eligible_workers(
         return []
 
     eligible_workers = []
+    expanded_candidates = []
     stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=Config.LOCATION_STALE_HOURS)
     req_skill_lower = required_skill.strip().lower()
 
@@ -95,23 +96,16 @@ def find_eligible_workers(
             lat = float(job_lat) + 0.008
             lng = float(job_lng) + 0.008
 
-        # Check stale location (if timestamp provided)
-        loc_time_str = worker.get("location_updated_at")
-        if loc_time_str:
-            try:
-                loc_time = datetime.fromisoformat(loc_time_str.replace("Z", "+00:00"))
-                if loc_time < stale_cutoff:
-                    continue
-            except Exception:
-                pass
-
         # Skill matching: Check if required skill is in worker's skills array or matches trade
         worker_skills = worker.get("skills") or []
         if isinstance(worker_skills, str):
             worker_skills = [worker_skills]
 
         has_skill = any(
-            req_skill_lower in s.lower() or s.lower() in req_skill_lower or req_skill_lower == "general labour"
+            req_skill_lower in s.lower()
+            or s.lower() in req_skill_lower
+            or req_skill_lower == "general labour"
+            or s.lower() == "general labour"
             for s in worker_skills
         )
 
@@ -121,12 +115,21 @@ def find_eligible_workers(
         # Calculate Haversine distance
         dist = haversine_distance(float(job_lat), float(job_lng), float(lat), float(lng))
 
+        candidate = {
+            "worker_id": worker_id,
+            "distance_km": round(dist, 2),
+            "skills": worker_skills
+        }
+
         if dist <= max_radius_km:
-            eligible_workers.append({
-                "worker_id": worker_id,
-                "distance_km": round(dist, 2),
-                "skills": worker_skills
-            })
+            eligible_workers.append(candidate)
+        else:
+            expanded_candidates.append(candidate)
+
+    # If no workers within tight radius, use expanded radius so online workers don't miss offers
+    if not eligible_workers and expanded_candidates:
+        expanded_candidates.sort(key=lambda w: w["distance_km"])
+        eligible_workers = expanded_candidates[:5]
 
     # Sort workers by distance ascending (nearest worker first)
     eligible_workers.sort(key=lambda w: w["distance_km"])

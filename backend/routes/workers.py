@@ -147,6 +147,19 @@ def get_worker_offers():
         # 1. Fetch pending offers that are unexpired
         offers_res = client.table("job_offers").select("*").eq("worker_id", worker_id).eq("status", "pending").gt("expires_at", now_iso).order("created_at", desc=True).execute()
 
+        # If no pending offers, sweep recent open jobs to check if an offer should be dispatched to this worker
+        if not offers_res or not offers_res.data:
+            try:
+                open_jobs_res = client.table("jobs").select("id").eq("status", "open").order("created_at", desc=True).limit(5).execute()
+                if open_jobs_res and open_jobs_res.data:
+                    from services.dispatch import dispatch_job_offers
+                    for oj in open_jobs_res.data:
+                        dispatch_job_offers(oj["id"])
+                    # Re-query offers after auto-dispatch sweep
+                    offers_res = client.table("job_offers").select("*").eq("worker_id", worker_id).eq("status", "pending").gt("expires_at", now_iso).order("created_at", desc=True).execute()
+            except Exception as sweep_err:
+                print(f"[get_worker_offers auto-dispatch sweep warning] {sweep_err}")
+
         if not offers_res or not offers_res.data:
             return jsonify({
                 "success": True,
@@ -265,6 +278,10 @@ def get_worker_bookings():
             else:
                 maps_url = f"https://www.google.com/maps/search/?api=1&query={loc_str.replace(' ', '+')}"
 
+            workers_needed = int(job.get("workers_needed") or job.get("workers_required") or 1)
+            confirmed_count = int(job.get("confirmed_workers") or 1)
+            remaining_vacancies = max(0, workers_needed - confirmed_count)
+
             results.append({
                 "id": b["id"],
                 "booking_id": b["id"],
@@ -280,7 +297,12 @@ def get_worker_bookings():
                 "date": str(job.get("job_date") or job.get("date") or ""),
                 "customer_name": customer.get("full_name", "Site Employer"),
                 "customer_phone": customer.get("phone", "Contact via platform"),
-                "confirmed_at": b.get("confirmed_at")
+                "confirmed_at": b.get("confirmed_at"),
+                "workers_needed": workers_needed,
+                "confirmed_workers": confirmed_count,
+                "remaining_vacancies": remaining_vacancies,
+                "can_refer": remaining_vacancies > 0,
+                "required_skill": job.get("required_skill") or job.get("skill") or "General Labour"
             })
 
         return jsonify({

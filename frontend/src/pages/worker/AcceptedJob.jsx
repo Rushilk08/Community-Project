@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { createWorkerRequest, getBookingRequests, getWorkerBookings } from '../../services/api';
+import { createWorkerRequest, getBookingRequests, getWorkerBookings, pledgeWorkerTeam } from '../../services/api';
+import ReferCoworkersModal from '../../components/worker/ReferCoworkersModal';
 import Loading from '../../components/Loading';
 
 export default function AcceptedJob() {
@@ -15,27 +16,32 @@ export default function AcceptedJob() {
   const [requestError, setRequestError] = useState('');
   const [requestMessage, setRequestMessage] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [isReferModalOpen, setIsReferModalOpen] = useState(false);
+  const [markedTeamReady, setMarkedTeamReady] = useState(true);
+  const [isPledging, setIsPledging] = useState(false);
+  const [teamPledgedSuccess, setTeamPledgedSuccess] = useState(false);
+
+  const fetchBooking = async () => {
+    try {
+      const res = await getWorkerBookings();
+      const active = res?.bookings?.find((item) => ['confirmed', 'in_progress'].includes(item.status)) || null;
+      setBooking(active);
+      if (active?.id) {
+        try {
+          const requestResponse = await getBookingRequests(active.id);
+          setRequests(Array.isArray(requestResponse?.requests) ? requestResponse.requests : []);
+        } catch (requestLoadError) {
+          setRequestError(requestLoadError.message || 'Could not load worker requests.');
+        }
+      }
+    } catch (err) {
+      console.warn('Booking fetch warning:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchBooking() {
-      try {
-        const res = await getWorkerBookings();
-        const active = res?.bookings?.find((item) => ['confirmed', 'in_progress'].includes(item.status)) || null;
-        setBooking(active);
-        if (active?.id) {
-          try {
-            const requestResponse = await getBookingRequests(active.id);
-            setRequests(Array.isArray(requestResponse?.requests) ? requestResponse.requests : []);
-          } catch (requestLoadError) {
-            setRequestError(requestLoadError.message || 'Could not load worker requests.');
-          }
-        }
-      } catch (err) {
-        console.warn('Booking fetch warning:', err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchBooking();
   }, []);
 
@@ -68,10 +74,31 @@ export default function AcceptedJob() {
     .filter((item) => item.request_type === 'overtime_pay' && item.status === 'approved')
     .reduce((total, item) => total + (Number(item.requested_extra_pay) || 0), 0);
 
+  const totalNeeded = Number(booking?.workers_needed || 1);
+  const confirmed = Number(booking?.confirmed_workers || 1);
+  const remainingVacancies = Number(booking?.remaining_vacancies ?? Math.max(0, totalNeeded - confirmed));
+
   const handleNavigate = () => {
     if (booking?.location) {
       const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(booking.location)}`;
       window.open(mapsUrl, '_blank');
+    }
+  };
+
+  const handleQuickPledge = async () => {
+    if (!booking?.job_id && !booking?.id) return;
+    setIsPledging(true);
+    try {
+      await pledgeWorkerTeam({
+        job_id: booking.job_id || booking.id,
+        remaining_count: remainingVacancies
+      });
+      setTeamPledgedSuccess(true);
+      fetchBooking();
+    } catch (err) {
+      alert(err.message || 'Failed to confirm team.');
+    } finally {
+      setIsPledging(false);
     }
   };
 
@@ -103,6 +130,152 @@ export default function AcceptedJob() {
                 </p>
               )}
             </div>
+
+            {/* Team Vacancies Banner - Mark Box Flow */}
+            {remainingVacancies > 0 && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #ecfdf5 100%)',
+                  border: '1.5px dashed #16a34a',
+                  borderRadius: '12px',
+                  padding: '1.25rem',
+                  marginBottom: '1.5rem',
+                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.08)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      backgroundColor: '#dcfce7',
+                      color: '#15803d',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem',
+                      flexShrink: 0
+                    }}
+                  >
+                    👥
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          backgroundColor: '#dcfce7',
+                          color: '#15803d',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          textTransform: 'uppercase'
+                        }}
+                      >
+                        Team Vacancies Open
+                      </span>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#14532d', fontWeight: 700 }}>
+                        {remainingVacancies} More Worker{remainingVacancies > 1 ? 's' : ''} Needed for this Job!
+                      </h4>
+                    </div>
+                    <p style={{ margin: '0.35rem 0 0.75rem', fontSize: '0.875rem', color: '#475569', lineHeight: 1.45 }}>
+                      The customer posted this job for <strong>{totalNeeded} workers</strong> ({confirmed} confirmed, <strong>{remainingVacancies} open</strong>).
+                    </p>
+
+                    {teamPledgedSuccess || booking?.has_team_pledged ? (
+                      <div
+                        style={{
+                          backgroundColor: '#f0fdf4',
+                          border: '1.5px solid #22c55e',
+                          borderRadius: '8px',
+                          padding: '0.65rem 0.85rem',
+                          color: '#15803d',
+                          fontSize: '0.88rem',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        <span>✅</span>
+                        <span>
+                          <strong>Team Confirmed!</strong> You marked that you have the remaining {remainingVacancies} worker(s) ready and will bring them with you to the worksite.
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* The Worker Checkbox: "I have remaining person is there for this work" */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.65rem',
+                            backgroundColor: markedTeamReady ? '#f0fdf4' : '#ffffff',
+                            border: markedTeamReady ? '2px solid #16a34a' : '1.5px solid #cbd5e1',
+                            borderRadius: '8px',
+                            padding: '0.75rem 0.9rem',
+                            marginBottom: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setMarkedTeamReady(!markedTeamReady)}
+                        >
+                          <input
+                            type="checkbox"
+                            id="accepted-team-check"
+                            checked={markedTeamReady}
+                            onChange={(e) => setMarkedTeamReady(e.target.checked)}
+                            style={{ width: '22px', height: '22px', accentColor: '#16a34a', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <label
+                            htmlFor="accepted-team-check"
+                            style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 700,
+                              color: markedTeamReady ? '#14532d' : '#0f172a',
+                              cursor: 'pointer',
+                              margin: 0
+                            }}
+                          >
+                            I have the remaining {remainingVacancies} person{remainingVacancies > 1 ? 's' : ''} is there for this work (I will bring them)
+                          </label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={handleQuickPledge}
+                            disabled={!markedTeamReady || isPledging}
+                            className="btn btn-primary"
+                            style={{
+                              backgroundColor: '#16a34a',
+                              borderColor: '#15803d',
+                              fontWeight: 700,
+                              padding: '0.55rem 1.25rem',
+                              borderRadius: '8px',
+                              boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)',
+                              cursor: (!markedTeamReady || isPledging) ? 'not-allowed' : 'pointer',
+                              opacity: !markedTeamReady ? 0.6 : 1
+                            }}
+                          >
+                            {isPledging ? 'Confirming...' : `✅ Confirm I Will Bring ${remainingVacancies} Coworkers`}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsReferModalOpen(true)}
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: '0.8rem', color: '#475569' }}
+                          >
+                            More Options / Details
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
               <div className="card" style={{ marginBottom: 0 }}>
@@ -227,6 +400,18 @@ export default function AcceptedJob() {
           </Link>
         </div>
       </div>
+
+      {/* Refer Coworkers Modal for Multi-Worker Jobs */}
+      {booking && (
+        <ReferCoworkersModal
+          isOpen={isReferModalOpen}
+          job={booking}
+          onClose={() => setIsReferModalOpen(false)}
+          onSuccess={() => {
+            fetchBooking();
+          }}
+        />
+      )}
     </div>
   );
 }

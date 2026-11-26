@@ -6,6 +6,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import RoleRedirect from './routes/RoleRedirect';
 import Navbar from './components/Navbar';
 import AssistantWidget from './components/AssistantWidget';
+import GlobalLeaveActionBanner from './components/GlobalLeaveActionBanner';
 
 // Public Pages
 import Home from './pages/Home';
@@ -172,6 +173,7 @@ export default function App() {
               </RouteTransition>
             </main>
             <AssistantWidget />
+            <GlobalLeaveActionBanner />
           </div>
         </BrowserRouter>
       </AuthProvider>

@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { updateWorkerAvailability, getWorkerBookings, updateWorkerLocation, acceptOffer } from '../../services/api';
+import {
+  updateWorkerAvailability,
+  getWorkerBookings,
+  updateWorkerLocation,
+  acceptOffer,
+  getMyLeaves,
+  cancelMyLeave
+} from '../../services/api';
 import useWorkerOffers from '../../hooks/useWorkerOffers';
 import SlideToAccept from '../../components/SlideToAccept';
 import AnimatedNumber from '../../components/AnimatedNumber';
@@ -16,7 +23,7 @@ import WorkerReplacementInvitationsSection from '../../components/worker/WorkerR
 import { DashboardTabs, AnimatedTabPanel } from '../../components/DashboardTabs';
 
 export default function WorkerDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -24,15 +31,35 @@ export default function WorkerDashboard() {
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [leaves, setLeaves] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState('');
   const [acceptingOfferId, setAcceptingOfferId] = useState(null);
+  const [isCancellingLeave, setIsCancellingLeave] = useState(false);
   const {
     offers,
     loading: offersLoading,
     error: offersError,
     refresh: refreshOffers
   } = useWorkerOffers({ enabled: isAvailable });
+
+  const formatDateTime = (isoStr) => {
+    if (!isoStr) return '';
+    try {
+      const currentLang = i18n.language ? i18n.language.split('-')[0] : 'en';
+      const locale = currentLang === 'kn' ? 'kn-IN' : currentLang === 'hi' ? 'hi-IN' : 'en-IN';
+      return new Date(isoStr).toLocaleString(locale, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return isoStr;
+    }
+  };
 
   const handleDashboardAccept = async (offerId) => {
     setAcceptingOfferId(offerId);
@@ -50,12 +77,50 @@ export default function WorkerDashboard() {
     }
   };
 
+  const handleCancelActiveLeave = async () => {
+    if (!activeApprovedLeave) return;
+    const confirmPrompt = t(
+      'confirmCancelApprovedLeave',
+      'Are you sure you want to cancel this approved leave and return to active work?'
+    );
+    if (!window.confirm(confirmPrompt)) return;
+
+    setIsCancellingLeave(true);
+    setStatusMessage(null);
+    try {
+      await cancelMyLeave(activeApprovedLeave.id);
+      setLeaves((prev) =>
+        prev.map((l) => (l.id === activeApprovedLeave.id ? { ...l, status: 'cancelled' } : l))
+      );
+      setIsAvailable(true);
+      setStatusMessage({
+        type: 'success',
+        text: t('leaveCancelledSuccess', 'Leave cancelled successfully. You are now available for work.')
+      });
+    } catch (err) {
+      setStatusMessage({
+        type: 'error',
+        text: err.message || 'Failed to cancel leave.'
+      });
+    } finally {
+      setIsCancellingLeave(false);
+    }
+  };
+
   const workerName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('worker');
   const workerSkill = user?.user_metadata?.skill;
   const activeBookings = bookings.filter((booking) => {
     const status = String(booking.status || '').toLowerCase();
     return status !== 'completed' && status !== 'cancelled';
   });
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const activeApprovedLeave = leaves.find(
+    (l) => l.status === 'approved' && todayStr >= l.start_date && todayStr <= l.end_date
+  );
+  const latestDecidedLeave = leaves.find(
+    (l) => l.status === 'approved' || l.status === 'rejected'
+  );
 
   useEffect(() => {
     updateWorkerAvailability(true).catch(() => {});
@@ -77,11 +142,15 @@ export default function WorkerDashboard() {
   useEffect(() => {
     let active = true;
 
-    async function loadBookings() {
+    async function loadData() {
       try {
-        const response = await getWorkerBookings();
+        const [bookingsRes, leavesRes] = await Promise.all([
+          getWorkerBookings().catch(() => ({ bookings: [] })),
+          getMyLeaves().catch(() => ({ leaves: [] }))
+        ]);
         if (active) {
-          setBookings(Array.isArray(response?.bookings) ? response.bookings : []);
+          setBookings(Array.isArray(bookingsRes?.bookings) ? bookingsRes.bookings : []);
+          setLeaves(Array.isArray(leavesRes?.leaves) ? leavesRes.leaves : []);
           setBookingsError('');
         }
       } catch (error) {
@@ -91,7 +160,7 @@ export default function WorkerDashboard() {
       }
     }
 
-    loadBookings();
+    loadData();
     return () => {
       active = false;
     };
@@ -120,13 +189,13 @@ export default function WorkerDashboard() {
   };
 
   const tabs = [
-    { id: 'overview', label: 'Offers & Overview', icon: 'overview' },
-    { id: 'calendar', label: 'Availability Calendar', icon: 'calendar' },
-    { id: 'referrals', label: 'Refer a Worker', icon: 'users' },
-    { id: 'leave', label: 'Apply for Leave', icon: 'calendar' },
-    { id: 'cancellations', label: 'Cancellation Requests', icon: 'alert' },
-    { id: 'replacements', label: 'Replacement Invitations', icon: 'siren' },
-    { id: 'reviews', label: 'Ratings & Reviews', icon: 'star' }
+    { id: 'overview', label: t('tabOffersOverview', 'Offers & Overview'), icon: 'overview' },
+    { id: 'calendar', label: t('tabCalendar', 'Availability Calendar'), icon: 'calendar' },
+    { id: 'referrals', label: t('tabReferWorker', 'Refer a Worker'), icon: 'users' },
+    { id: 'leave', label: t('tabApplyLeave', 'Apply for Leave'), icon: 'calendar' },
+    { id: 'cancellations', label: t('tabCancellations', 'Cancellation Requests'), icon: 'alert' },
+    { id: 'replacements', label: t('tabReplacements', 'Replacement Invitations'), icon: 'siren' },
+    { id: 'reviews', label: t('tabReviews', 'Ratings & Reviews'), icon: 'star' }
   ];
 
   return (
@@ -137,48 +206,100 @@ export default function WorkerDashboard() {
           <span className="dashboard-hero-light-sweep" />
         </div>
         <div className="dashboard-hero-copy">
-          <span className="dashboard-eyebrow">WORKER WORKSPACE</span>
+          <span className="dashboard-eyebrow">{t('workerWorkspace', 'WORKER WORKSPACE')}</span>
           <h1>{t('welcome')}, {workerName}</h1>
-          <p>Find nearby work, recommend peers for vacant positions, manage leave & schedule transparently.</p>
+          <p>{t('workerHeroSubtitle', 'Find nearby work, recommend peers for vacant positions, manage leave & schedule transparently.')}</p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Link to="/worker/job-offers" className="dashboard-hero-cta">
-              Browse job offers <span aria-hidden="true">→</span>
+              {t('browseJobOffers', 'Browse job offers')} <span aria-hidden="true">→</span>
             </Link>
             <button
               onClick={() => setActiveTab('referrals')}
               className="btn btn-outline"
               style={{ backgroundColor: 'rgba(255,255,255,0.9)', color: '#0f172a', fontWeight: 600, borderRadius: '999px', padding: '0.65rem 1.25rem' }}
             >
-              🤝 Refer Someone
+              {t('referSomeone', '🤝 Refer Someone')}
             </button>
           </div>
         </div>
 
-        <div className="availability-card" data-availability={isAvailable ? 'available' : 'unavailable'}>
+        <div className="availability-card" data-availability={activeApprovedLeave ? 'on-leave' : (isAvailable ? 'available' : 'unavailable')}>
           <div className="availability-card-heading">
             <span
-              className={`availability-icon ${isAvailable ? 'is-available' : 'is-unavailable'}`}
+              className={`availability-icon ${activeApprovedLeave ? 'is-on-leave' : (isAvailable ? 'is-available' : 'is-unavailable')}`}
               aria-hidden="true"
             >
               <span className="availability-icon-dot" />
             </span>
             <div>
-              <span className="dashboard-overline">YOUR STATUS</span>
-              <h2>{isAvailable ? t('available') : t('unavailable')}</h2>
+              <span className="dashboard-overline">{t('yourStatus', 'YOUR STATUS')}</span>
+              <h2>
+                {activeApprovedLeave
+                  ? t('onLeaveStatus', 'On Approved Leave')
+                  : (isAvailable ? t('available') : t('unavailable'))}
+              </h2>
             </div>
           </div>
-          <p>{isAvailable ? 'You can receive new opportunities near you.' : 'Turn availability on when you are ready for work.'}</p>
+          {activeApprovedLeave ? (
+            <div style={{ marginTop: '0.25rem' }}>
+              <p style={{ margin: '0 0 0.35rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                {activeApprovedLeave.jobs?.title || t('leaveRequest', 'Leave')} ({activeApprovedLeave.start_date} → {activeApprovedLeave.end_date})
+              </p>
+              {activeApprovedLeave.reviewed_at && (
+                <p style={{ margin: '0 0 0.4rem', fontSize: '0.785rem', color: '#bbf7d0', fontWeight: 500 }}>
+                  ✓ {t('leaveApprovedAt', 'Customer gave leave on')} {formatDateTime(activeApprovedLeave.reviewed_at)}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleCancelActiveLeave}
+                disabled={isCancellingLeave}
+                className="btn btn-sm"
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.25)',
+                  color: '#ffffff',
+                  border: '1.5px solid #ef4444',
+                  fontWeight: 700,
+                  fontSize: '0.825rem',
+                  padding: '0.45rem 1rem',
+                  borderRadius: '999px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  marginTop: '0.45rem',
+                  cursor: isCancellingLeave ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isCancellingLeave ? t('updating', 'Updating…') : `✕ ${t('cancelApprovedLeave', 'Cancel Leave & Return to Work')}`}
+              </button>
+            </div>
+          ) : (
+            <>
+              <p>{isAvailable ? t('availableDesc', 'You can receive new opportunities near you.') : t('unavailableDesc', 'Turn availability on when you are ready for work.')}</p>
+              {latestDecidedLeave && latestDecidedLeave.status === 'rejected' && latestDecidedLeave.reviewed_at && (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.785rem', color: '#fca5a5' }}>
+                  ✕ {t('leaveDeniedAt', 'Leave denied on')} {formatDateTime(latestDecidedLeave.reviewed_at)} ({latestDecidedLeave.jobs?.title || 'Job'})
+                </p>
+              )}
+              {latestDecidedLeave && latestDecidedLeave.status === 'approved' && latestDecidedLeave.reviewed_at && !activeApprovedLeave && (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.785rem', color: '#bbf7d0' }}>
+                  ✓ {t('leaveApprovedAt', 'Customer gave leave on')} {formatDateTime(latestDecidedLeave.reviewed_at)} ({latestDecidedLeave.start_date} → {latestDecidedLeave.end_date})
+                </p>
+              )}
+            </>
+          )}
           <button
             type="button"
             className={`availability-toggle ${isAvailable ? 'is-available' : 'is-unavailable'}`}
             onClick={handleToggleAvailability}
             disabled={isUpdatingAvailability}
             aria-pressed={isAvailable}
+            style={{ marginTop: '0.75rem' }}
           >
-            {isUpdatingAvailability ? 'Updating…' : isAvailable ? 'Go unavailable' : 'Go available'}
+            {isUpdatingAvailability ? t('updating', 'Updating…') : isAvailable ? t('goUnavailable', 'Go unavailable') : t('goAvailable', 'Go available')}
           </button>
           {statusMessage && (
-            <p className={`dashboard-status-message ${statusMessage.type}`} role={status}>
+            <p className={`dashboard-status-message ${statusMessage.type}`} role="status">
               {statusMessage.text}
             </p>
           )}
@@ -189,33 +310,43 @@ export default function WorkerDashboard() {
         <article className="dashboard-stat-card" onClick={() => setActiveTab('overview')} style={{ cursor: 'pointer' }}>
           <span className="dashboard-stat-icon offers-icon" aria-hidden="true">↗</span>
           <div>
-            <p>New opportunities</p>
+            <p>{t('newOpportunities', 'New opportunities')}</p>
             <AnimatedNumber value={offers.length} loading={offersLoading} />
-            <span>{offers.length === 1 ? 'offer waiting for you' : 'offers waiting for you'}</span>
+            <span>{offers.length === 1 ? t('offerWaiting', 'offer waiting for you') : t('offersWaiting', 'offers waiting for you')}</span>
           </div>
         </article>
         <article className="dashboard-stat-card" onClick={() => setActiveTab('overview')} style={{ cursor: 'pointer' }}>
           <span className="dashboard-stat-icon bookings-icon" aria-hidden="true">✓</span>
           <div>
-            <p>Accepted jobs</p>
+            <p>{t('acceptedJobs', 'Accepted jobs')}</p>
             <AnimatedNumber value={activeBookings.length} loading={bookingsLoading} />
-            <span>current assignments</span>
+            <span>{t('currentAssignments', 'current assignments')}</span>
           </div>
         </article>
         <article className="dashboard-stat-card" onClick={() => setActiveTab('calendar')} style={{ cursor: 'pointer' }}>
-          <span className="dashboard-stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }} aria-hidden="true">📅</span>
+          <span className="dashboard-stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }} aria-hidden="true">
+            {activeApprovedLeave ? '🏖️' : '📅'}
+          </span>
           <div>
-            <p>Availability</p>
-            <strong className="dashboard-stat-skill">{isAvailable ? 'Schedule Open' : 'Unavailable'}</strong>
-            <span>click to view calendar</span>
+            <p>{t('availability', 'Availability')}</p>
+            <strong className="dashboard-stat-skill">
+              {activeApprovedLeave
+                ? t('onLeaveStatus', 'On Approved Leave')
+                : (isAvailable ? t('scheduleOpen', 'Schedule Open') : t('unavailable', 'Unavailable'))}
+            </strong>
+            <span>
+              {activeApprovedLeave
+                ? `${activeApprovedLeave.start_date} → ${activeApprovedLeave.end_date}`
+                : t('clickToViewCalendar', 'click to view calendar')}
+            </span>
           </div>
         </article>
         <article className="dashboard-stat-card" onClick={() => setActiveTab('reviews')} style={{ cursor: 'pointer' }}>
           <span className="dashboard-stat-icon skill-icon" aria-hidden="true">⭐</span>
           <div>
-            <p>Verified Rating</p>
+            <p>{t('verifiedRating', 'Verified Rating')}</p>
             <strong className="dashboard-stat-skill">4.9 ★</strong>
-            <span>view performance breakdown</span>
+            <span>{t('viewPerformance', 'view performance breakdown')}</span>
           </div>
         </article>
       </section>
@@ -353,7 +484,7 @@ export default function WorkerDashboard() {
                   style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <span className="dashboard-action-icon">🤝</span>
-                  <span><strong>Refer a Worker</strong><small>Recommend people for open vacancies</small></span>
+                  <span><strong>{t('tabReferWorker', 'Refer a Worker')}</strong><small>Recommend people for open vacancies</small></span>
                   <span aria-hidden="true">→</span>
                 </button>
                 <button
@@ -362,7 +493,7 @@ export default function WorkerDashboard() {
                   style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <span className="dashboard-action-icon">🏖️</span>
-                  <span><strong>Apply for Leave</strong><small>Request single or multi-day time off</small></span>
+                  <span><strong>{t('tabApplyLeave', 'Apply for Leave')}</strong><small>Request single or multi-day time off</small></span>
                   <span aria-hidden="true">→</span>
                 </button>
                 <button
@@ -371,7 +502,7 @@ export default function WorkerDashboard() {
                   style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <span className="dashboard-action-icon">⚠️</span>
-                  <span><strong>Cancel Job Commitment</strong><small>Request cancellation with employer approval</small></span>
+                  <span><strong>{t('tabCancellations', 'Cancel Job Commitment')}</strong><small>Request cancellation with employer approval</small></span>
                   <span aria-hidden="true">→</span>
                 </button>
                 <button
@@ -380,7 +511,7 @@ export default function WorkerDashboard() {
                   style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <span className="dashboard-action-icon">📅</span>
-                  <span><strong>Availability Calendar</strong><small>Check your color-coded schedule</small></span>
+                  <span><strong>{t('tabCalendar', 'Availability Calendar')}</strong><small>Check your color-coded schedule</small></span>
                   <span aria-hidden="true">→</span>
                 </button>
               </div>

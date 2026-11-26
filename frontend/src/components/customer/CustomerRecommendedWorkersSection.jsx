@@ -75,23 +75,30 @@ export default function CustomerRecommendedWorkersSection() {
             const isPending = ref.status === 'pending' || ref.status === 'invited' || ref.status === 'registered';
             const job = ref.jobs || {};
             const referringWorker = ref.profiles?.full_name || 'A registered worker';
+            const isTeamPledge = ref.notes?.includes('I have remaining person') || ref.notes?.includes('bring coworker') || ref.candidate_name?.includes('Coworker #');
 
             return (
               <div
                 key={ref.id}
                 style={{
-                  border: isPending ? '2px solid #93c5fd' : '1px solid #e2e8f0',
-                  backgroundColor: isPending ? '#eff6ff' : '#f8fafc',
+                  border: isTeamPledge ? '2px solid #22c55e' : isPending ? '2px solid #93c5fd' : '1px solid #e2e8f0',
+                  backgroundColor: isTeamPledge ? '#f0fdf4' : isPending ? '#eff6ff' : '#f8fafc',
                   borderRadius: '10px',
                   padding: '1.25rem'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span className="badge" style={{ backgroundColor: '#dbeafe', color: '#1e40af', fontWeight: 800 }}>
-                        RECOMMENDED CANDIDATE
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {isTeamPledge ? (
+                        <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 800 }}>
+                          👥 TEAM MEMBER (BROUGHT BY {referringWorker.toUpperCase()})
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ backgroundColor: '#dbeafe', color: '#1e40af', fontWeight: 800 }}>
+                          RECOMMENDED CANDIDATE
+                        </span>
+                      )}
                       <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>
                         {ref.candidate_name}
                       </h4>

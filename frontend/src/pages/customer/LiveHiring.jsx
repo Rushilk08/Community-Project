@@ -2,14 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useJobStatus from '../../hooks/useJobStatus';
-import { cancelJob, getJobWorkerRequests, resolveWorkerRequest } from '../../services/api';
+import { cancelJob, getJobWorkerRequests, resolveWorkerRequest, getMyJobs } from '../../services/api';
 import Loading from '../../components/Loading';
 import ErrorMessage from '../../components/ErrorMessage';
 
 export default function LiveHiring() {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
-  const jobId = searchParams.get('jobId') || 'job-101';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlJobId = searchParams.get('jobId');
+  const [resolvedJobId, setResolvedJobId] = useState(urlJobId || '');
+  const [isResolvingJob, setIsResolvingJob] = useState(!urlJobId);
+  const [noJobsFound, setNoJobsFound] = useState(false);
   const navigate = useNavigate();
   const [approvedWorkerIds, setApprovedWorkerIds] = useState(new Set());
   const [isCancelling, setIsCancelling] = useState(false);
@@ -18,11 +21,51 @@ export default function LiveHiring() {
   const [workerRequestsError, setWorkerRequestsError] = useState('');
   const [resolvingRequestId, setResolvingRequestId] = useState(null);
 
+  useEffect(() => {
+    if (urlJobId) {
+      setResolvedJobId(urlJobId);
+      setIsResolvingJob(false);
+      setNoJobsFound(false);
+      return;
+    }
+
+    let isMounted = true;
+    async function resolveActiveJob() {
+      try {
+        const res = await getMyJobs();
+        const jobs = Array.isArray(res?.jobs) ? res.jobs : (Array.isArray(res) ? res : []);
+        if (!isMounted) return;
+
+        if (jobs.length > 0) {
+          const activeJob = jobs.find((j) => j.status === 'open' || j.status === 'in_progress') || jobs[0];
+          if (activeJob?.id) {
+            setResolvedJobId(activeJob.id);
+            setSearchParams({ jobId: activeJob.id }, { replace: true });
+          } else {
+            setNoJobsFound(true);
+          }
+        } else {
+          setNoJobsFound(true);
+        }
+      } catch {
+        if (isMounted) setNoJobsFound(true);
+      } finally {
+        if (isMounted) setIsResolvingJob(false);
+      }
+    }
+    resolveActiveJob();
+    return () => {
+      isMounted = false;
+    };
+  }, [urlJobId, setSearchParams]);
+
+  const jobId = resolvedJobId;
   const { jobStatus, loading, error, isPolling, isLive, stopPolling, refresh } = useJobStatus(jobId);
 
   const isCancelled = jobStatus?.status === 'cancelled' || cancelSuccess;
 
   const loadWorkerRequests = useCallback(async () => {
+    if (!jobId) return;
     try {
       const response = await getJobWorkerRequests(jobId);
       setWorkerRequests(Array.isArray(response?.requests) ? response.requests : []);
@@ -84,6 +127,27 @@ export default function LiveHiring() {
       return next;
     });
   };
+
+  if (isResolvingJob) {
+    return <Loading message="Finding your active job..." />;
+  }
+
+  if (noJobsFound && !jobId) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '3.5rem 1.5rem', borderRadius: '16px' }}>
+        <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>📋</div>
+        <h2 style={{ fontSize: '1.45rem', fontWeight: 700, marginBottom: '0.65rem', color: '#0f172a' }}>
+          No Active Job Posting Found
+        </h2>
+        <p style={{ color: '#64748b', maxWidth: '480px', margin: '0 auto 1.75rem auto', lineHeight: 1.5 }}>
+          You don't have an active job in progress right now. Post a new job request to start dispatching offers and hiring nearby workers live.
+        </p>
+        <Link to="/customer/post-job" className="btn btn-primary" style={{ padding: '0.75rem 1.75rem', fontWeight: 700 }}>
+          ➕ Post a Job Now
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>

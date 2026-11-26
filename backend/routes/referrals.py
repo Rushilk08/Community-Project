@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from services.auth import require_auth
+from services.validation import is_valid_uuid
 from services.notifications import create_notification
 from database.supabase_client import get_service_client
 from config import Config
@@ -103,8 +104,21 @@ def create_referral():
             client = get_service_client()
 
             # 1. Check job status and vacancies
+            if not is_valid_uuid(job_id):
+                return jsonify({"success": False, "message": "Invalid job identifier", "error_code": "NOT_FOUND"}), 404
+
             job_res = client.table("jobs").select("*").eq("id", job_id).maybe_single().execute()
             job = job_res.data if job_res else None
+            if not job:
+                # Check if client passed a booking_id instead of job_id
+                booking_res = client.table("bookings").select("job_id").eq("id", job_id).maybe_single().execute()
+                if booking_res and booking_res.data:
+                    real_job_id = booking_res.data.get("job_id")
+                    job_res = client.table("jobs").select("*").eq("id", real_job_id).maybe_single().execute()
+                    job = job_res.data if job_res else None
+                    if job:
+                        job_id = real_job_id
+
             if not job:
                 return jsonify({"success": False, "message": "Job not found", "error_code": "NOT_FOUND"}), 404
             if job.get("status") in ["completed", "cancelled"]:
@@ -402,3 +416,109 @@ def claim_referral_invite(referral_id: str):
             return jsonify({"success": False, "message": str(e), "error_code": "DATABASE_ERROR"}), 500
 
     return jsonify({"success": True, "message": "Referral registered (Demo Mode)"}), 200
+
+
+@referrals_bp.route("/referrals/pledge-team", methods=["POST"])
+@require_auth(allowed_roles=["worker"])
+def pledge_team():
+    """
+    Worker marks the box: 'I have remaining person is there for this work'
+    Automatically fulfills remaining vacancies with worker's team and notifies employer.
+    """
+    payload = request.get_json(silent=True) or {}
+    job_id = str(payload.get("job_id") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    if not job_id:
+        return jsonify({"success": False, "message": "job_id is required", "error_code": "VALIDATION_ERROR"}), 400
+
+    referring_worker_id = g.current_user["id"]
+    referring_worker_name = g.current_profile.get("full_name", "A registered worker")
+    referring_worker_phone = g.current_profile.get("phone", "")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if not is_valid_uuid(job_id):
+        # Demo fallback for non-UUID job ids
+        return jsonify({
+            "success": True,
+            "message": "Confirmed team in demo mode",
+            "remaining_count": int(payload.get("remaining_count") or 2)
+        }), 200
+
+    if Config.is_supabase_configured():
+        try:
+            client = get_service_client()
+            job_res = client.table("jobs").select("*").eq("id", job_id).maybe_single().execute()
+            job = job_res.data if job_res else None
+            if not job:
+                # Check if client passed a booking_id instead of job_id
+                booking_res = client.table("bookings").select("job_id").eq("id", job_id).maybe_single().execute()
+                if booking_res and booking_res.data:
+                    real_job_id = booking_res.data.get("job_id")
+                    job_res = client.table("jobs").select("*").eq("id", real_job_id).maybe_single().execute()
+                    job = job_res.data if job_res else None
+                    if job:
+                        job_id = real_job_id
+
+            if not job:
+                return jsonify({"success": False, "message": "Job not found", "error_code": "NOT_FOUND"}), 404
+
+            workers_needed = int(job.get("workers_needed") or job.get("workers_required") or 1)
+            confirmed = int(job.get("confirmed_workers") or 0)
+            remaining_vacancies = max(0, workers_needed - confirmed)
+            if remaining_vacancies <= 0:
+                return jsonify({"success": False, "message": "All vacancies for this job are already filled", "error_code": "JOB_FULL"}), 400
+
+            created = []
+            skill = job.get("required_skill") or job.get("skill") or "General Labour"
+            for i in range(remaining_vacancies):
+                ref_id = str(uuid.uuid4())
+                cand_phone = f"{referring_worker_phone} (Crew #{i+1})" if referring_worker_phone else f"+91-TEAM-{i+1}"
+                cand_name = f"{referring_worker_name}'s Coworker #{i + 1}"
+                ref_data = {
+                    "id": ref_id,
+                    "job_id": job_id,
+                    "referring_worker_id": referring_worker_id,
+                    "candidate_name": cand_name,
+                    "candidate_phone": cand_phone,
+                    "candidate_skills": skill,
+                    "experience": "Attending with referring worker",
+                    "location": job.get("worksite_address") or job.get("location") or "Bengaluru",
+                    "notes": notes or f"Worker marked checkbox: 'I have remaining person is there for this work' (will bring coworker with {referring_worker_name})",
+                    "consent_confirmed": True,
+                    "status": "pending",
+                    "created_at": now_iso,
+                    "updated_at": now_iso
+                }
+                try:
+                    ins = client.table("worker_referrals").insert(ref_data).execute()
+                    if ins and ins.data:
+                        created.append(ins.data[0])
+                except Exception as ins_err:
+                    print(f"[Pledge Team Ins Warning] {ins_err}")
+
+            customer_id = job.get("customer_id")
+            if customer_id:
+                create_notification(
+                    user_id=customer_id,
+                    title="👥 Full Team Ready! Worker Bringing Remaining Coworkers",
+                    message=f"{referring_worker_name} marked that they have the remaining {remaining_vacancies} worker(s) and will bring them for '{job.get('title')}'.",
+                    notif_type="referral",
+                    data={"job_id": job_id, "has_team_pledged": True, "team_count": remaining_vacancies}
+                )
+
+            return jsonify({
+                "success": True,
+                "message": f"Confirmed! You marked that you will bring {remaining_vacancies} coworker(s) for this job.",
+                "remaining_count": remaining_vacancies,
+                "created_referrals": created
+            }), 200
+        except Exception as e:
+            return jsonify({"success": False, "message": str(e), "error_code": "DATABASE_ERROR"}), 500
+
+    # Demo fallback
+    return jsonify({
+        "success": True,
+        "message": "Confirmed! You marked that you will bring the remaining coworker(s) for this job (Demo Mode).",
+        "remaining_count": 2,
+        "created_referrals": []
+    }), 200
